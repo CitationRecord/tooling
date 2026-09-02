@@ -216,3 +216,25 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Credentials - never commit
+.env
+.env.*
+*.key
+*.pem
+secrets/
+config.local.*
+
+# Test items - MUST NOT enter git history (methodology 3.2)
+/testset/
+/items/
+*.testset.json
+*.items.csv
+ground-truth-answers.*
+
+# Raw model outputs - stored off-repo
+/outputs/raw/
+/runs/
+
+# Local scratch
+*.local
