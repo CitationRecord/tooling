@@ -14,7 +14,13 @@ from resolve.cache import Cache, citation_key
 from resolve.citations import known_reporter, non_case_citation, parse
 from resolve.client import MissingToken, RateLimited, redact, token
 from resolve.config import Config
-from resolve.coverage import HELD, REPORTER_GAP, VOLUME_GAP, CoverageProbe
+from resolve.coverage import (
+    HELD,
+    REPORTER_GAP,
+    VOLUME_GAP,
+    VOLUME_SPARSE,
+    CoverageProbe,
+)
 from resolve.journal import Journal, iso_utc
 from resolve.models import (
     NOT_A_FINDING,
@@ -23,6 +29,7 @@ from resolve.models import (
     REASON_REPORTER_ABSENT,
     REASON_UNKNOWN_REPORTER,
     REASON_VOLUME_ABSENT,
+    REASON_VOLUME_SPARSE,
     SCORABLE,
     STATUS_AMBIGUOUS,
     STATUS_ERROR,
@@ -149,46 +156,92 @@ def test_unknown_reporter_does_not_resolve():
 
 
 class FakeClient:
-    """Counts search calls and answers from a fixed table."""
+    """Answers structured holdings queries from a fixed table."""
 
-    def __init__(self, counts):
-        self.counts = counts
+    def __init__(self, volumes=None, present=0):
+        self.volumes = volumes or {}
+        self.present = present
         self.queries = []
         self.calls = []
 
-    def search_count(self, query):
-        self.queries.append(query)
-        return self.counts.get(query, 0)
+    def volume_holdings(self, reporter, volume, sample=20):
+        self.queries.append(("volume", reporter, str(volume)))
+        holdings = self.volumes.get((reporter, str(volume)))
+        if holdings is None:
+            return {"count": 0, "pages": [], "pages_are_complete": True, "sampled": 0}
+        return holdings
+
+    def reporter_has_opinions(self, reporter):
+        self.queries.append(("presence", reporter))
+        return self.present
 
 
-def probe_for(counts):
-    return CoverageProbe(FakeClient(counts))
+def holdings(count, pages=(), complete=True):
+    return {"count": count, "pages": list(pages),
+            "pages_are_complete": complete, "sampled": len(pages)}
 
 
-def test_volume_held_means_a_missing_page_is_a_real_absence():
-    verdict = probe_for({'citation:("576 U.S.")': 31}).check("U.S.", "576")
+def probe_for(volumes=None, present=0):
+    return CoverageProbe(FakeClient(volumes, present))
+
+
+def test_densely_held_volume_means_a_missing_page_is_a_real_absence():
+    verdict = probe_for({("U.S.", "576"): holdings(180)}).check("U.S.", "576", "9999")
     assert verdict.verdict == HELD
-    assert verdict.volume_opinion_count == 31
+    assert verdict.volume_opinion_count == 180
+
+
+def test_thin_volume_is_not_held_just_because_it_has_something():
+    """The Mata v. Avianca failure: 2 CIT opinions at pages 1369-1371 in
+    678 F. Supp. 3d are not coverage of page 443."""
+    verdict = probe_for(
+        {("F. Supp. 3d", "678"): holdings(2, [1369, 1371])}
+    ).check("F. Supp. 3d", "678", "443")
+    assert verdict.verdict == VOLUME_SPARSE
+    assert verdict.held_page_low == 1369
+    assert verdict.held_page_high == 1371
+
+
+def test_thin_volume_still_counts_when_the_page_is_inside_it():
+    verdict = probe_for(
+        {("F. Supp. 3d", "678"): holdings(3, [1300, 1369, 1400])}
+    ).check("F. Supp. 3d", "678", "1350")
+    assert verdict.verdict == HELD
+
+
+def test_thin_volume_with_no_page_information_is_not_held():
+    verdict = probe_for({("Obscure", "9"): holdings(2)}).check("Obscure", "9", "50")
+    assert verdict.verdict == VOLUME_SPARSE
 
 
 def test_reporter_absent_means_coverage_gap():
-    verdict = probe_for({}).check("Obscure Rep.", "12")
+    verdict = probe_for({}, present=0).check("Obscure Rep.", "12", "5")
     assert verdict.verdict == REPORTER_GAP
     assert verdict.reporter_opinion_count == 0
 
 
 def test_reporter_held_but_volume_absent_is_a_coverage_gap():
-    verdict = probe_for({'citation:("U.S.")': 1367558}).check("U.S.", "9999")
+    verdict = probe_for({}, present=20).check("U.S.", "9999", "1")
     assert verdict.verdict == VOLUME_GAP
 
 
-def test_coverage_counts_are_probed_once_per_book():
-    client = FakeClient({'citation:("U.S.")': 10})
+def test_coverage_is_probed_once_per_book():
+    client = FakeClient({}, present=10)
     probe = CoverageProbe(client)
     for _ in range(4):
-        probe.check("U.S.", "9999")
-    # One volume query and one reporter query, not four of each.
+        probe.check("U.S.", "9999", "1")
+    # One volume query and one presence query, not four of each.
     assert len(client.queries) == 2
+
+
+def test_reporter_prefix_does_not_inflate_a_volume():
+    """citation:("347 U.S.") also matched 347 U.S. App. D.C.; the structured
+    filter must key on the exact reporter."""
+    client = FakeClient({("U.S.", "347"): holdings(691),
+                         ("U.S. App. D.C.", "347"): holdings(43)})
+    probe = CoverageProbe(client)
+    assert probe.check("U.S.", "347", "483").volume_opinion_count == 691
+    assert probe.check("U.S. App. D.C.", "347", "262").volume_opinion_count == 43
 
 
 # --------------------------------------------------------------------------
@@ -196,17 +249,23 @@ def test_coverage_counts_are_probed_once_per_book():
 
 
 class ScriptedClient:
-    def __init__(self, entries, counts=None, cluster_court=None):
+    def __init__(self, entries, volumes=None, present=0):
         self.entries = entries
-        self.counts = counts or {}
+        self.volumes = volumes or {}
+        self.present = present
         self.calls = []
-        self._cluster_court = cluster_court
 
     def lookup_citation(self, text):
         return self.entries
 
-    def search_count(self, query):
-        return self.counts.get(query, 0)
+    def volume_holdings(self, reporter, volume, sample=20):
+        return self.volumes.get(
+            (reporter, str(volume)),
+            {"count": 0, "pages": [], "pages_are_complete": True, "sampled": 0},
+        )
+
+    def reporter_has_opinions(self, reporter):
+        return self.present
 
     def docket(self, docket_id):
         return {"court_id": "scotus"}
@@ -249,7 +308,7 @@ def test_missing_page_in_a_held_volume_is_not_found():
     client = ScriptedClient(
         [{"status": 404, "clusters": [], "error_message": "Citation not found",
           "normalized_citations": ["576 U.S. 9999"]}],
-        counts={'citation:("576 U.S.")': 31},
+        volumes={("U.S.", "576"): holdings(180)},
     )
     result = resolver_for(client).resolve("576 U.S. 9999")
     assert result.status == STATUS_NOT_FOUND
@@ -257,10 +316,24 @@ def test_missing_page_in_a_held_volume_is_not_found():
     assert result.is_scorable
 
 
+def test_thinly_held_volume_is_not_covered_not_not_found():
+    """End to end version of the Mata v. Avianca failure."""
+    client = ScriptedClient(
+        [{"status": 404, "clusters": [],
+          "normalized_citations": ["678 F. Supp. 3d 443"]}],
+        volumes={("F. Supp. 3d", "678"): holdings(2, [1369, 1371])},
+    )
+    result = resolver_for(client).resolve("678 F. Supp. 3d 443")
+    assert result.status == STATUS_NOT_COVERED
+    assert result.reason == REASON_VOLUME_SPARSE
+    assert not result.is_scorable
+    assert result.coverage["held_page_high"] == 1371
+
+
 def test_missing_volume_is_not_covered():
     client = ScriptedClient(
         [{"status": 404, "clusters": [], "normalized_citations": ["9999 U.S. 1"]}],
-        counts={'citation:("U.S.")': 1367558},
+        present=20,
     )
     result = resolver_for(client).resolve("9999 U.S. 1")
     assert result.status == STATUS_NOT_COVERED
@@ -271,7 +344,7 @@ def test_missing_volume_is_not_covered():
 def test_missing_reporter_is_not_covered():
     client = ScriptedClient(
         [{"status": 404, "clusters": [], "normalized_citations": ["5 Alaska Fed. 10"]}],
-        counts={},
+        present=0,
     )
     result = resolver_for(client).resolve("5 Alaska Fed. 10")
     assert result.status == STATUS_NOT_COVERED
@@ -291,17 +364,39 @@ def test_statute_is_not_covered():
     assert result.reason == REASON_NOT_CASE_LAW
 
 
-def test_multiple_matches_are_ambiguous_not_resolved():
-    client = ScriptedClient([{"status": 300, "clusters": [CLUSTER, dict(CLUSTER, id=99)]}])
+def test_two_different_cases_on_one_citation_are_ambiguous():
+    other = dict(CLUSTER, id=99, docket_id=777,
+                 case_name="Some Other Case", date_filed="1999-01-01")
+    client = ScriptedClient([{"status": 300, "clusters": [CLUSTER, other]}])
     result = resolver_for(client).resolve("576 U.S. 644")
     assert result.status == STATUS_AMBIGUOUS
     assert len(result.candidates) == 2
     assert not result.is_scorable
 
 
+def test_duplicate_records_of_one_case_still_resolve():
+    """CourtListener stores Loper Bright twice. That is a database
+    duplicate, not two cases sharing a citation, and sending it to attorney
+    adjudication would inflate the unscorable bucket."""
+    duplicate = dict(CLUSTER, id=99)
+    client = ScriptedClient([{"status": 300, "clusters": [CLUSTER, duplicate]}])
+    result = resolver_for(client).resolve("576 U.S. 644")
+    assert result.status == STATUS_RESOLVED
+    assert result.is_scorable
+    assert "duplicate records" in result.explanation
+    assert len(result.candidates) == 2
+
+
+def test_duplicates_are_matched_on_name_and_date_without_a_docket():
+    first = {k: v for k, v in CLUSTER.items() if k != "docket_id"}
+    second = dict(first, id=99)
+    client = ScriptedClient([{"status": 300, "clusters": [first, second]}])
+    assert resolver_for(client).resolve("576 U.S. 644").status == STATUS_RESOLVED
+
+
 def test_disabling_the_probe_never_yields_not_found():
     """Without coverage evidence, a miss cannot be called a fabrication."""
-    client = ScriptedClient([{"status": 404, "clusters": []}], counts={'citation:("576 U.S.")': 31})
+    client = ScriptedClient([{"status": 404, "clusters": []}], volumes={("U.S.", "576"): holdings(180)})
     result = resolver_for(client, probe_coverage=False).resolve("576 U.S. 9999")
     assert result.status == STATUS_NOT_COVERED
 
@@ -323,6 +418,57 @@ def test_year_mismatch_is_reported_as_a_discrepancy():
     result = resolver_for(client).resolve("Obergefell v. Hodges, 576 U.S. 644 (2019)")
     assert result.status == STATUS_RESOLVED
     assert any(d["field"] == "year" for d in result.discrepancies)
+
+
+# --------------------------------------------------------------------------
+# throttling
+
+
+class FakeResponse:
+    def __init__(self, text, headers=None):
+        self.text = text
+        self.headers = headers or {}
+        self.status_code = 429
+
+
+def test_the_named_rate_limit_is_adopted(monkeypatch):
+    """A throttle reply names the real budget; believe it over the default."""
+    monkeypatch.setenv(TOKEN_ENV_VAR, "t" * 20)
+    from resolve.client import CourtListener
+
+    client = CourtListener(Config(shared_per_minute=60.0), session=FakeSession())
+    client._learn_limit(FakeResponse("Rate limit exceeded: 5/min"))
+    assert client._shared.per_minute == 5.0
+
+
+def test_a_higher_named_limit_does_not_loosen_the_throttle(monkeypatch):
+    monkeypatch.setenv(TOKEN_ENV_VAR, "t" * 20)
+    from resolve.client import CourtListener
+
+    client = CourtListener(Config(shared_per_minute=5.0), session=FakeSession())
+    client._learn_limit(FakeResponse("Rate limit exceeded: 500/min"))
+    assert client._shared.per_minute == 5.0
+
+
+def test_retry_after_prefers_the_header(monkeypatch):
+    monkeypatch.setenv(TOKEN_ENV_VAR, "t" * 20)
+    from resolve.client import CourtListener
+
+    assert CourtListener._retry_after(FakeResponse("", {"Retry-After": "7"})) == 7.0
+    assert CourtListener._retry_after(
+        FakeResponse("Expected available in 4 seconds.")
+    ) == 5.0
+
+
+class FakeSession:
+    def __init__(self):
+        self.headers = {}
+
+    def request(self, *args, **kwargs):
+        raise AssertionError("no request expected")
+
+    def close(self):
+        pass
 
 
 # --------------------------------------------------------------------------

@@ -25,6 +25,8 @@ _LOCK = threading.Lock()
 
 # Rate limit replies carry the wait in prose: "Expected available in 4 seconds."
 _RETRY_HINT = re.compile(r"available in (\d+(?:\.\d+)?)\s*second", re.I)
+# "Rate limit exceeded: 5/min" names the real budget for this token.
+_LIMIT_HINT = re.compile(r"Rate limit exceeded:\s*(\d+(?:\.\d+)?)\s*/\s*(min|hour|day)", re.I)
 
 
 class ResolverError(RuntimeError):
@@ -102,6 +104,7 @@ class _Throttle:
     """Minimum spacing between calls to one endpoint."""
 
     def __init__(self, per_minute: float) -> None:
+        self.per_minute = per_minute
         self._interval = 60.0 / per_minute if per_minute > 0 else 0.0
         self._last = 0.0
         self._lock = threading.Lock()
@@ -129,6 +132,11 @@ class CourtListener:
                 "Accept": "application/json",
             }
         )
+        # CourtListener's throttle replies report one quota ("5/min") and a
+        # burst of search calls will throttle a later citation lookup, so the
+        # budget is shared rather than counted per endpoint. Endpoint
+        # throttles sit on top of the shared one, never under it.
+        self._shared = _Throttle(self._config.shared_per_minute)
         self._throttles = {
             "citation-lookup": _Throttle(self._config.lookup_per_minute),
             "search": _Throttle(self._config.search_per_minute),
@@ -157,6 +165,7 @@ class CourtListener:
         attempts = 0
         while True:
             attempts += 1
+            self._shared.wait()
             self._throttle_for(endpoint).wait()
             started = time.monotonic()
             try:
@@ -177,6 +186,7 @@ class CourtListener:
             duration = int((time.monotonic() - started) * 1000)
 
             if response.status_code == 429:
+                self._learn_limit(response)
                 wait = self._retry_after(response)
                 self.calls.append(
                     Call(endpoint, method, 429, duration, throttled=True)
@@ -202,6 +212,17 @@ class CourtListener:
                     redact(f"HTTP {response.status_code} from {endpoint}")
                 )
             return response
+
+    def _learn_limit(self, response) -> None:
+        """Adopt the limit CourtListener names in a throttle reply."""
+        match = _LIMIT_HINT.search(response.text or "")
+        if not match:
+            return
+        per_minute = float(match.group(1))
+        if match.group(2).lower().startswith("h"):
+            per_minute /= 60.0
+        if per_minute > 0 and per_minute < self._shared.per_minute:
+            self._shared = _Throttle(per_minute)
 
     @staticmethod
     def _retry_after(response) -> float:
@@ -231,6 +252,80 @@ class CourtListener:
         )
         body = response.json()
         return int(body.get("count") or 0)
+
+    def volume_holdings(self, reporter: str, volume, sample: int = 20) -> dict:
+        """Exactly what CourtListener holds in one volume of one reporter.
+
+        Uses the structured citation filter rather than a phrase match on
+        citation text. A phrase query is a prefix match: citation:("347 U.S.")
+        also matches "347 U.S. App. D.C.", inflating the count for any
+        reporter whose name prefixes another. The filter matches the stored
+        reporter field exactly.
+
+        Costs one request, plus a second only when the volume holds more
+        opinions than one page returns.
+        """
+        params = {
+            "citations__reporter": reporter,
+            "citations__volume": str(volume),
+            "fields": "id,date_filed,citations",
+            "page_size": sample,
+        }
+        body = self._request("GET", "clusters", params=params).json()
+        results = body.get("results") or []
+
+        pages = sorted(
+            int(citation["page"])
+            for result in results
+            for citation in (result.get("citations") or [])
+            if citation.get("reporter") == reporter
+            and str(citation.get("page", "")).isdigit()
+        )
+
+        complete = not body.get("next")
+        if complete:
+            count = len(results)
+        else:
+            counted = self._request(
+                "GET", "clusters", params={**params, "count": "on"}
+            ).json()
+            count = int(counted.get("count") or 0)
+
+        return {
+            "count": count,
+            "pages": pages,
+            "pages_are_complete": complete,
+            "sampled": len(results),
+        }
+
+    def reporter_has_opinions(self, reporter: str) -> int:
+        """Opinions visible on the first page for a reporter.
+
+        A presence check, not a total: an exact count over a whole reporter
+        forces a full scan and times out. Zero means CourtListener holds
+        nothing in this reporter.
+        """
+        body = self._request(
+            "GET", "clusters",
+            params={"citations__reporter": reporter, "fields": "id", "page_size": 20},
+        ).json()
+        return len(body.get("results") or [])
+
+    def search_citations(self, query: str, limit: int = 100) -> list:
+        """Every citation string on the opinions matching a query.
+
+        Used to find which pages of a volume CourtListener actually holds.
+        A count alone cannot say whether the cited page falls inside the
+        part of the volume that was ingested.
+        """
+        response = self._request(
+            "GET", "search",
+            params={"type": "o", "q": query, "page_size": min(limit, 100)},
+        )
+        found = []
+        for result in response.json().get("results") or []:
+            found.extend(result.get("citation") or [])
+        return found
 
     def cluster(self, cluster_id: int) -> dict:
         response = self._request("GET", f"clusters/{cluster_id}")

@@ -22,9 +22,15 @@ class Config:
     out_dir: Path = DEFAULT_OUT_DIR
     api_base: str = API_BASE
 
-    # Observed limits on a personal token: search is the tight one.
+    # Observed on a personal token: the throttle reply reports a single
+    # "5/min" budget, and search calls throttle later citation lookups, so
+    # the shared ceiling is what actually binds. Endpoint rates sit on top.
+    shared_per_minute: float = 5.0
     lookup_per_minute: float = 60.0
     search_per_minute: float = 5.0
+
+    # A throttle reply that names a lower limit is adopted at runtime, so a
+    # tighter tier does not have to be configured in advance.
 
     timeout: float = 60.0
     max_retries: int = 3

@@ -15,7 +15,7 @@ from __future__ import annotations
 from . import citations as cite
 from .client import CourtListener, MissingToken, RateLimited, ResolverError, TransportError, redact
 from .config import Config
-from .coverage import HELD, REPORTER_GAP, UNKNOWN, VOLUME_GAP, CoverageProbe
+from .coverage import HELD, REPORTER_GAP, UNKNOWN, VOLUME_GAP, VOLUME_SPARSE, CoverageProbe
 from .journal import iso_utc, utc_now
 from .models import (
     HISTORY_CAVEAT,
@@ -32,6 +32,7 @@ from .models import (
     REASON_UNKNOWN_REPORTER,
     REASON_UNPARSEABLE,
     REASON_VOLUME_ABSENT,
+    REASON_VOLUME_SPARSE,
     STATUS_AMBIGUOUS,
     STATUS_ERROR,
     STATUS_NOT_COVERED,
@@ -137,6 +138,18 @@ class Resolver:
             return self._resolved(query, parsed, entry, clusters[0])
 
         if status_code == LOOKUP_MULTIPLE or len(clusters) > 1:
+            distinct = self._distinct_cases(clusters)
+            if len(distinct) == 1:
+                # The same case recorded twice in CourtListener is a database
+                # duplicate, not two cases sharing a citation. Sending it to
+                # attorney adjudication would inflate the unscorable bucket.
+                resolved = self._resolved(query, parsed, entry, distinct[0])
+                resolved.explanation = (
+                    f"CourtListener holds the cited case in {len(clusters)} "
+                    "duplicate records of the same decision"
+                )
+                resolved.candidates = self._candidates(clusters)
+                return resolved
             return self._ambiguous(query, parsed, entry, clusters)
 
         if status_code == LOOKUP_NOT_FOUND or not clusters:
@@ -305,13 +318,25 @@ class Resolver:
             )
         return found
 
-    def _ambiguous(self, query: str, parsed, entry: dict, clusters: list) -> Resolution:
-        resolution = self._blank(
-            query, STATUS_AMBIGUOUS, REASON_MULTIPLE,
-            f"{len(clusters)} cases match this citation; an attorney resolves it",
-        )
-        self._stamp_cited(resolution, parsed)
-        resolution.candidates = [
+    @staticmethod
+    def _distinct_cases(clusters: list) -> list:
+        """Collapse records of the same decision.
+
+        Same docket, or same case name on the same date, is one case however
+        many times CourtListener has stored it.
+        """
+        seen = {}
+        for cluster in clusters:
+            key = cluster.get("docket_id") or (
+                (cluster.get("case_name") or "").casefold(),
+                cluster.get("date_filed"),
+            )
+            seen.setdefault(key, cluster)
+        return list(seen.values())
+
+    @staticmethod
+    def _candidates(clusters: list) -> list:
+        return [
             {
                 "cluster_id": c.get("id"),
                 "case_name": c.get("case_name"),
@@ -323,6 +348,14 @@ class Resolver:
             }
             for c in clusters[:10]
         ]
+
+    def _ambiguous(self, query: str, parsed, entry: dict, clusters: list) -> Resolution:
+        resolution = self._blank(
+            query, STATUS_AMBIGUOUS, REASON_MULTIPLE,
+            f"{len(clusters)} cases match this citation; an attorney resolves it",
+        )
+        self._stamp_cited(resolution, parsed)
+        resolution.candidates = self._candidates(clusters)
         return resolution
 
     def _unparseable(self, query: str, parsed, non_case: str | None,
@@ -384,7 +417,7 @@ class Resolver:
             resolution.coverage = {"verdict": UNKNOWN, "detail": "probe disabled"}
             return resolution
 
-        verdict = self._probe.check(reporter, parsed.volume)
+        verdict = self._probe.check(reporter, parsed.volume, parsed.page)
 
         if verdict.verdict == HELD:
             resolution = self._blank(
@@ -396,6 +429,12 @@ class Resolver:
             resolution = self._blank(
                 query, STATUS_NOT_COVERED, REASON_REPORTER_ABSENT,
                 f"{verdict.detail}, so its absence says nothing about the citation",
+            )
+        elif verdict.verdict == VOLUME_SPARSE:
+            resolution = self._blank(
+                query, STATUS_NOT_COVERED, REASON_VOLUME_SPARSE,
+                f"{verdict.detail}. A page CourtListener never ingested and an "
+                "invented page are indistinguishable from here",
             )
         elif verdict.verdict == VOLUME_GAP:
             resolution = self._blank(
