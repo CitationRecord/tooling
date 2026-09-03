@@ -1,0 +1,64 @@
+# Claim list for archive/. Copy to claims.yaml and edit.
+#
+# Each entry names one public vendor claim tracked in a system profile. The
+# archiver snapshots the page the claim appears on; it does not judge the
+# claim. Adjudication is attorney work.
+#
+# Required on every entry: id, url, claim, verified.
+# Optional: system, vendor, profile_ref, notes, wait_until, settle_ms, full_page.
+# Any other key is an error, so a typo cannot silently track the wrong thing.
+
+version: 1
+methodology_version: "1.0"
+edition: "2026-Q3"
+
+claims:
+  - id: example-vendor-hallucination-free
+    system: "Example Research Assistant"
+    vendor: "Example Legal AI, Inc."
+    profile_ref: "7.1"
+    url: https://example.com/product/research-assistant
+    verified: true
+    claim: >-
+      Verbatim text of the assertion being tracked, quoted exactly as it
+      appears on the page, including any qualifiers or footnote markers.
+    notes: Product landing page. Claim sits under the "Accuracy" heading.
+
+  - id: example-vendor-benchmark-pdf-page
+    system: "Example Research Assistant"
+    vendor: "Example Legal AI, Inc."
+    profile_ref: "7.1"
+    url: https://example.com/resources/accuracy-benchmark
+    verified: true
+    claim: >-
+      A second assertion from the same vendor, tracked separately because it
+      may change independently of the first.
+    # Per-claim overrides, all optional:
+    wait_until: load        # load | domcontentloaded | networkidle | commit
+    settle_ms: 3000         # extra pause after load, for late-rendering pages
+    full_page: true         # false captures the viewport only
+
+  # `verified` states whether the URL has been fetched and confirmed to be the
+  # primary source of the claim. It is required and has no default: a
+  # forgotten key is an error, never silent permission to fetch.
+  #
+  # An entry with `verified: false` is never fetched. No page request, no
+  # screenshot, no robots.txt request, no Wayback submission. The run records
+  # the entry as unverified_source and exits 1, so an unconfirmed source stays
+  # visible until someone confirms it. A wrong source in the evidence archive
+  # is worse than a missing one.
+  #
+  # `url` may be omitted or null while `verified` is false, for a claim
+  # reconstructed from advertising or secondhand coverage whose primary source
+  # has not been located yet.
+  - id: example-vendor-claim-from-ad-creative
+    vendor: "Example Legal AI, Inc."
+    url: null
+    verified: false
+    claim: >-
+      An assertion recorded from an advertisement, whose primary source on the
+      vendor's own site has not been located.
+    notes: >-
+      TODO: find this on the vendor site. If it appears only in paid
+      advertising and never on the product site, archive the ad and record
+      that distinction, which is itself a finding.

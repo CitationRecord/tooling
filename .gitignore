@@ -220,6 +220,8 @@ __marimo__/
 # Credentials - never commit
 .env
 .env.*
+# The template carries names only, never values, and setup depends on it.
+!.env.example
 *.key
 *.pem
 secrets/

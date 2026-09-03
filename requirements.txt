@@ -1,0 +1,19 @@
+# The Citation Record - tooling dependencies
+#
+# After installing, fetch the browser build used by archive/:
+#   py -m playwright install chromium
+
+# archive/
+playwright>=1.44
+PyYAML>=6.0
+
+# resolve/
+eyecite>=2.6
+reporters-db>=3.2
+python-dotenv>=1.0
+
+# shared
+requests>=2.31
+
+# Tests
+pytest>=8.0
