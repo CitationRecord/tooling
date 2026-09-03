@@ -98,8 +98,15 @@ false, for a claim whose primary source has not been located yet.
 The claim file itself is hashed into every record it produces, so a record can
 be traced to the exact list that generated it.
 
-See `claims.example.yaml`. Keep the real `claims.yaml` in the repository: the
-claim list is public information and part of what makes an edition replicable.
+See `claims.example.yaml` for the shape. The real `claims.yaml` is **not** in
+this repository and is gitignored so it cannot be committed here by accident.
+
+The list annotates why each claim is tracked, and those annotations
+characterize named vendors before they have been measured and before the
+21-day notice the published methodology commits to. It therefore lives in
+`CitationRecord/claim-archive`, which is private, and ships with the edition
+it supports. Replicating a published edition means running this code against
+that edition's claim list, which is released alongside it.
 
 ## Output layout
 

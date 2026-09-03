@@ -227,6 +227,12 @@ __marimo__/
 secrets/
 config.local.*
 
+# Tracked claim list - MUST NOT enter git history while this repo is public.
+# It annotates why each vendor claim is tracked, and those annotations
+# characterize named vendors before measurement and before the 21-day notice
+# the methodology commits to. Lives in CitationRecord/claim-archive, private.
+/archive/claims.yaml
+
 # Test items - MUST NOT enter git history (methodology 3.2)
 /testset/
 /items/
