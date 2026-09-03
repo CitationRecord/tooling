@@ -1,9 +1,9 @@
 """Command line interface for the coverage scope probe.
 
-    py -m coverage plan       show what would be measured, and the cost
-    py -m coverage run        measure, resumably; rerun to continue
-    py -m coverage report     write the JSON and markdown from saved state
-    py -m coverage status     how far along a run is
+    py -m census plan       show what would be measured, and the cost
+    py -m census run        measure, resumably; rerun to continue
+    py -m census report     write the JSON and markdown from saved state
+    py -m census status     how far along a run is
 
 Exit codes: 0 complete, 1 an error, 3 stopped early with work still to do.
 """
@@ -187,12 +187,12 @@ def cmd_report(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="coverage",
+        prog="census",
         description="Measure how densely CourtListener holds each reporter.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--version", action="version", version=f"coverage {__version__}")
+    parser.add_argument("--version", action="version", version=f"census {__version__}")
     subparsers = parser.add_subparsers(dest="command")
 
     def common(sub):

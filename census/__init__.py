@@ -13,7 +13,7 @@ No model is in the loop. This counts records and reports arithmetic.
 
 __version__ = "0.1.0"
 
-SCHEMA = "citationrecord.coverage.probe.v1"
+SCHEMA = "citationrecord.census.probe.v1"
 
 #: Stamped into every output so a probe result cannot be mistaken for the
 #: census it precedes.

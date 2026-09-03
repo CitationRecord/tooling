@@ -1,6 +1,6 @@
 """Hermetic tests for the coverage scope probe. No network, no API token.
 
-    py -m pytest coverage/tests -q
+    py -m pytest census/tests -q
 """
 
 from __future__ import annotations
@@ -9,11 +9,11 @@ import json
 
 import pytest
 
-from coverage import ARTIFACT_KIND
-from coverage.frame import PROBE_FRAME, Reporter, build_plan, sample_volumes, strata
-from coverage.probe import Probe, Stopped
-from coverage.report import build_document, summarise, to_markdown
-from coverage.store import ProbeState, Store, VolumeResult, iso_utc
+from census import ARTIFACT_KIND
+from census.frame import PROBE_FRAME, Reporter, build_plan, sample_volumes, strata
+from census.probe import Probe, Stopped
+from census.report import build_document, summarise, to_markdown
+from census.store import ProbeState, Store, VolumeResult, iso_utc
 
 from resolve.client import RateLimited
 

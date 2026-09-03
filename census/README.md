@@ -19,10 +19,10 @@ No model is in the loop. This counts records and reports arithmetic.
 ## Use
 
 ```powershell
-py -m coverage plan       # what would be measured, and what it costs
-py -m coverage run        # measure; rerun to continue where it stopped
-py -m coverage status     # how far along
-py -m coverage report     # rewrite outputs from saved state
+py -m census plan       # what would be measured, and what it costs
+py -m census run        # measure; rerun to continue where it stopped
+py -m census status     # how far along
+py -m census report     # rewrite outputs from saved state
 ```
 
 `--per-reporter N` changes the sample size, `--budget N` stops a session after
@@ -118,7 +118,7 @@ environment and never appears in output.
 ## Tests
 
 ```powershell
-py -m pytest coverage/tests
+py -m pytest census/tests
 ```
 
 Hermetic. They cover the probe labelling in all three artifacts, deterministic

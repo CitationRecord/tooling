@@ -230,7 +230,7 @@ def to_markdown(document: dict) -> str:
         "",
         "## Provenance",
         "",
-        f"- Tool: coverage {document['tool_version']}",
+        f"- Tool: census {document['tool_version']}",
         f"- Tooling commit: {(provenance.get('tooling') or {}).get('commit')}"
         f" (dirty: {(provenance.get('tooling') or {}).get('dirty')})",
         f"- Methodology version: {provenance.get('methodology_version')}",
