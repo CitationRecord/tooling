@@ -56,12 +56,22 @@ def run_provenance(methodology_version: str | None = None) -> dict:
     except Exception:
         eyecite_version = reporters_version = None
 
-    status = _git("status", "--porcelain")
+    # _git returns None both when git fails and when the command succeeds with
+    # empty output, so a clean tree used to log dirty=null, indistinguishable
+    # from "git unavailable". A record meant to prove which code produced a
+    # result cannot be unsure whether that code was modified. Ask git a
+    # question whose success is not an empty string.
+    head = _git("rev-parse", "HEAD")
+    if head is None:
+        dirty = None                      # no git; genuinely unknown
+    else:
+        status = _git("status", "--porcelain")
+        dirty = bool(status)              # None (clean, empty output) -> False
     return {
         "resolver_version": __version__,
         "tooling": {
-            "commit": _git("rev-parse", "HEAD"),
-            "dirty": bool(status) if status is not None else None,
+            "commit": head,
+            "dirty": dirty,
         },
         "methodology_version": methodology_version,
         "api": "courtlistener/v4",
