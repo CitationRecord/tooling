@@ -93,22 +93,27 @@ sampling is deterministic and has no seed, so the reconstruction hits the same
 volumes a probe run would. The reporter therefore has to be one the frame
 declares, and `volumes` exits 1 naming the four it knows if it is not.
 
-### It reconstructs a record that does not exist
+### It reconstructs a record that was never filed
 
-The census scope probe wrote nothing. Its output directory was never created
-and no probe artifact was ever committed, so the figures it produced cannot be
-read back.
+The census scope probe wrote no artifact. Its output directory was never
+created and nothing was committed, so its figures cannot be read back from any
+file.
 
-Every `volumes` artifact says so in a `reconstruction` block: what it was
-recomputed from, that it was not read from the probe, and that
-`probe_output_recorded` is false. It also records that the probe counted
-opinions through the API against a live index while this counts citation rows
-in a named bulk generation, so the two reproduce the same shape and not the
-same figures.
+They are not lost, though. The first run's per-volume counts survive in prose,
+in the commit message that added the probe, `17e063c`: F. Supp. 3d as
+90, 99, 0, 0 and Cal. App. 5th as 74, 0, 0, 0. This reconstruction reproduces
+both exactly, so it is corroborated rather than merely plausible.
 
-That absence is the point rather than an aside. A per-volume sample rate with
-no record behind it was repeated as a corpus coverage share, and nothing
-existed to check it against.
+Every `volumes` artifact carries that distinction in its `reconstruction`
+block, because the two absences are different. `probe_artifact_recorded` is
+false; `probe_output_recorded_in` names the commit message; `corroborated` is
+true. It also records that the probe counted opinions through the API against
+a live index while this counts citation rows in a named bulk generation, so an
+exact agreement is evidence rather than a guarantee.
+
+A commit message carries no schema, no provenance stamp, no population and no
+caveats. That is how a 3-of-4 sample rate came to travel as a 75% coverage
+share, and it is the reason this command writes an artifact instead.
 
 ## Matching
 

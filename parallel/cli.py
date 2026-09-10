@@ -71,22 +71,27 @@ VOLUME_CAVEATS = [
 RECONSTRUCTION = {
     "is_reconstruction": True,
     "recomputed_from": "the bulk citations table and the census sampling frame",
-    "not_read_from": "the census scope probe's own output",
-    "probe_output_recorded": False,
+    "probe_artifact_recorded": False,
+    "probe_output_recorded_in": (
+        "prose, in the commit message of CitationRecord/tooling 17e063c"
+    ),
+    "corroborated": True,
     "note": (
-        "The census scope probe recorded nothing. Its output directory was "
-        "never created and no probe artifact was ever committed, so the "
-        "figures it produced cannot be read back. Everything here is "
-        "recomputed from the deterministic sampling frame and a named bulk "
-        "generation. That absence is the point rather than an aside: a "
-        "per-volume sample rate with no record behind it was repeated as a "
-        "corpus coverage share, and nothing existed to check it against."
+        "The census scope probe wrote no artifact. Its output directory was "
+        "never created and nothing was committed, so its figures cannot be "
+        "read back from any file. The first run's per-volume counts do "
+        "survive, in the commit message that added the probe: F. Supp. 3d as "
+        "90, 99, 0, 0 and Cal. App. 5th as 74, 0, 0, 0. This reconstruction "
+        "reproduces both exactly, so it is corroborated rather than merely "
+        "plausible. A commit message carries no schema, no provenance stamp, "
+        "no population and no caveats, which is how a 3-of-4 sample rate came "
+        "to travel as a 75% coverage share."
     ),
     "measures_differ": (
         "The probe counted opinions per volume through the CourtListener API "
         "against the live index. This counts citation rows per volume in a "
-        "named bulk generation. The two are related and not identical, so "
-        "this reproduces the probe's shape, not its exact figures."
+        "named bulk generation. The two are related and not identical, so an "
+        "exact agreement is evidence and not a guarantee."
     ),
 }
 

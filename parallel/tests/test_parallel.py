@@ -274,9 +274,24 @@ def test_the_artifact_says_it_is_a_reconstruction_of_a_missing_record(
     assert document["schema"] == VOLUMES_SCHEMA
     reconstruction = document["reconstruction"]
     assert reconstruction["is_reconstruction"] is True
-    assert reconstruction["probe_output_recorded"] is False
-    assert "recorded nothing" in reconstruction["note"]
+    assert reconstruction["probe_artifact_recorded"] is False
+    assert "wrote no artifact" in reconstruction["note"]
     assert "not identical" in reconstruction["measures_differ"]
+
+
+def test_the_artifact_distinguishes_no_artifact_from_no_record(
+        tmp_path, volumes_file):
+    """The probe wrote no file, but its first run survives in a commit message.
+
+    Those are different absences and the artifact must not collapse them: the
+    figures can be checked, just not from anything carrying a schema.
+    """
+    out = tmp_path / "volumes.json"
+    _run_volumes(volumes_file, out)
+    reconstruction = json.loads(out.read_text(encoding="utf-8"))["reconstruction"]
+    assert reconstruction["probe_artifact_recorded"] is False
+    assert "17e063c" in reconstruction["probe_output_recorded_in"]
+    assert reconstruction["corroborated"] is True
 
 
 def test_the_artifact_says_a_zero_past_the_extent_is_not_a_gap(
