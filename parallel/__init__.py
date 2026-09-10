@@ -19,11 +19,18 @@ distributed across reporters, and nothing else.
 No model is in the loop. This counts rows and reports arithmetic.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 SCHEMA = "citationrecord.parallel.v1"
+
+VOLUMES_SCHEMA = "citationrecord.parallel.volumes.v1"
 
 #: Stamped into every output. Unlike the census scope probe this is an exact
 #: count over a complete bulk generation and carries no sampling caveat. It is
 #: still a count of citations, not of cases.
 ARTIFACT_KIND = "exact_count"
+
+#: For counts that recompute what another instrument should have recorded and
+#: did not. Exact over its own source, but standing in for a missing record
+#: rather than reading one, and it says so in its own output.
+RECONSTRUCTION_KIND = "reconstruction"

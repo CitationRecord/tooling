@@ -25,8 +25,13 @@ Fetch the generation first, then count a pair:
     py -m bulk fetch --only citations
     py -m parallel pair --reporter "Cal. Rptr. 3d" --against "Cal. App. 5th"
 
-One pass over the citations table, about a minute and a half for the June 30
-generation. The artifact lands under `results/` unless `--out` says otherwise.
+Or count one reporter volume by volume:
+
+    py -m parallel volumes --reporter "Cal. App. 5th"
+
+One pass over the citations table either way, about a minute and a half for
+the June 30 generation. Artifacts land under `results/` unless `--out` says
+otherwise.
 
     --generation YYYY-MM-DD   bulk generation (default: the current one)
     --dir PATH                bulk directory, if not the generation's
@@ -37,7 +42,7 @@ generation. The artifact lands under `results/` unless `--out` says otherwise.
 ### Exit codes
 
     0   counted, artifact written
-    1   a reporter matched no citation row
+    1   a reporter matched no citation row, or is outside the census frame
     2   no citations file for that generation
 
 Exit 1 is deliberate. A reporter name that matches nothing is far more often a
@@ -64,6 +69,46 @@ case and cannot be attributed to one.
 `arithmetic.a_only_share_of_a` is the share of A's clusters carrying no B
 citation. **That number is not a coverage gap**, and it is the specific
 misreading this package exists to make checkable.
+
+## `volumes` — three measurements, kept apart
+
+`pair` answers how citations spread across two reporters. `volumes` answers
+how they spread across one reporter's volumes, which is what a per-volume
+sample rate is computed from.
+
+It produces three quantities that look alike and are not:
+
+| Block | Population | What it is |
+| --- | --- | --- |
+| `sampled_draw` | the volumes the census frame draws | a property of the draw |
+| `declared_range` | the frame's declared volume range | a property of that parameter |
+| `extent` | every volume carrying a citation | where the corpus stops |
+
+Only `extent` says anything about the corpus. The artifact also carries a
+`measurements` list naming each one, its population, and what it is not, so a
+figure lifted out of the JSON travels with the thing it was measured over.
+
+The draw is not re-invented here. It is recomputed from `census.frame`, whose
+sampling is deterministic and has no seed, so the reconstruction hits the same
+volumes a probe run would. The reporter therefore has to be one the frame
+declares, and `volumes` exits 1 naming the four it knows if it is not.
+
+### It reconstructs a record that does not exist
+
+The census scope probe wrote nothing. Its output directory was never created
+and no probe artifact was ever committed, so the figures it produced cannot be
+read back.
+
+Every `volumes` artifact says so in a `reconstruction` block: what it was
+recomputed from, that it was not read from the probe, and that
+`probe_output_recorded` is false. It also records that the probe counted
+opinions through the API against a live index while this counts citation rows
+in a named bulk generation, so the two reproduce the same shape and not the
+same figures.
+
+That absence is the point rather than an aside. A per-volume sample rate with
+no record behind it was repeated as a corpus coverage share, and nothing
+existed to check it against.
 
 ## Matching
 
