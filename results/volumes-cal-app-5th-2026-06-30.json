@@ -1,0 +1,177 @@
+{
+  "artifact_kind": "reconstruction",
+  "caveats": [
+    "Three measurements, not one. The zero rate among sampled volumes, the zero rate across the declared range, and the highest volume the corpus holds are separate quantities over separate populations. Reading the first as a corpus coverage share is the error this artifact corrects.",
+    "A zero beyond the highest volume held is not a coverage gap. It is a volume the corpus does not reach, and it says nothing about how well the volumes it does reach are held.",
+    "The declared volume range is a parameter of the sampling frame, not a fact read from CourtListener. It is deliberately wider than the corpus so that the corpus stopping short stays visible instead of being hidden by a range trimmed to fit.",
+    "Exact over the generation named, not sampled. It describes that bulk drop and is superseded by any later one.",
+    "This counts citations, not cases. A volume holding no citation in this reporter may still have its decisions held under a parallel reporter."
+  ],
+  "citation_rows": {
+    "matched": 2646,
+    "non_numeric_volumes": {},
+    "scanned": 18123788,
+    "without_cluster": 0
+  },
+  "declared_range": {
+    "first_volume": 1,
+    "first_zero_volume": 40,
+    "last_volume": 100,
+    "volumes": 100,
+    "zero_count": 61,
+    "zero_rate": 0.61
+  },
+  "extent": {
+    "first_volume_held": 1,
+    "last_volume_held": 39,
+    "sampled_beyond_last_held": [
+      50,
+      75,
+      92
+    ],
+    "sampled_beyond_last_held_count": 3,
+    "volumes_held": 39
+  },
+  "generation": "2026-06-30",
+  "histogram": {
+    "1": 74,
+    "10": 73,
+    "11": 74,
+    "12": 67,
+    "13": 69,
+    "14": 65,
+    "15": 66,
+    "16": 74,
+    "17": 60,
+    "18": 66,
+    "19": 66,
+    "2": 81,
+    "20": 77,
+    "21": 73,
+    "22": 74,
+    "23": 66,
+    "24": 74,
+    "25": 69,
+    "26": 66,
+    "27": 71,
+    "28": 63,
+    "29": 68,
+    "3": 83,
+    "30": 66,
+    "31": 63,
+    "32": 77,
+    "33": 71,
+    "34": 65,
+    "35": 74,
+    "36": 59,
+    "37": 58,
+    "38": 61,
+    "39": 20,
+    "4": 68,
+    "5": 65,
+    "6": 73,
+    "7": 71,
+    "8": 69,
+    "9": 67
+  },
+  "measured_at_utc": "2026-09-10T03:38:24.697997Z",
+  "measurements": [
+    {
+      "is_not": "a corpus coverage share",
+      "name": "sampled_zero_rate",
+      "population": "the 4 volumes the stratified frame draws",
+      "value": 0.75
+    },
+    {
+      "is_not": "a corpus coverage share",
+      "name": "declared_range_zero_rate",
+      "population": "volumes 1-100 of the declared range",
+      "value": 0.61
+    },
+    {
+      "is_not": "a rate",
+      "name": "last_volume_held",
+      "population": "every volume carrying a citation in this reporter",
+      "value": 39
+    }
+  ],
+  "provenance": {
+    "methodology_version": null,
+    "parallel_version": "0.2.0",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python_version": "3.11.9",
+    "tooling": {
+      "commit": "aa622409f698e0126c2768bb292c1b230e20e864",
+      "dirty": false
+    }
+  },
+  "reconstruction": {
+    "is_reconstruction": true,
+    "measures_differ": "The probe counted opinions per volume through the CourtListener API against the live index. This counts citation rows per volume in a named bulk generation. The two are related and not identical, so this reproduces the probe's shape, not its exact figures.",
+    "not_read_from": "the census scope probe's own output",
+    "note": "The census scope probe recorded nothing. Its output directory was never created and no probe artifact was ever committed, so the figures it produced cannot be read back. Everything here is recomputed from the deterministic sampling frame and a named bulk generation. That absence is the point rather than an aside: a per-volume sample rate with no record behind it was repeated as a corpus coverage share, and nothing existed to check it against.",
+    "probe_output_recorded": false,
+    "recomputed_from": "the bulk citations table and the census sampling frame"
+  },
+  "reporter": {
+    "category": "state",
+    "declared_first_volume": 1,
+    "declared_last_volume": 100,
+    "key": "Cal. App. 5th",
+    "name": "California Appellate Reports, Fifth Series",
+    "range_source": "Cal. App. 5th began in 2016 and is in the low hundreds"
+  },
+  "sampled_draw": {
+    "clusters_by_volume": {
+      "16": 74,
+      "50": 0,
+      "75": 0,
+      "92": 0
+    },
+    "per_reporter": 4,
+    "rows_by_volume": {
+      "16": 74,
+      "50": 0,
+      "75": 0,
+      "92": 0
+    },
+    "strata": [
+      {
+        "high": 33,
+        "low": 1,
+        "name": "early"
+      },
+      {
+        "high": 67,
+        "low": 34,
+        "name": "middle"
+      },
+      {
+        "high": 100,
+        "low": 68,
+        "name": "recent"
+      }
+    ],
+    "volumes": [
+      16,
+      50,
+      75,
+      92
+    ],
+    "zero_count": 3,
+    "zero_rate": 0.75,
+    "zero_volumes": [
+      50,
+      75,
+      92
+    ]
+  },
+  "schema": "citationrecord.parallel.volumes.v1",
+  "source": {
+    "downloaded_at_utc": "2026-09-03T03:25:36.045501Z",
+    "file": "citations-2026-06-30.csv.bz2",
+    "manifest": "C:\\Users\\jbwagoner\\citationrecord\\bulk-data\\2026-06-30\\manifest.json",
+    "rows_declared": 18123788,
+    "sha256": "9b1f1481a0259273f0a673f05266fdf89049e3ec2906a0181d573d42f5e5ab4e"
+  }
+}
