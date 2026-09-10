@@ -25,8 +25,11 @@ WORKSPACE = REPO_ROOT.parent
 #: edition ships, then made public with its history intact.
 PRIVATE_ROOT = WORKSPACE / "queries"
 
-#: Public repositories, by name. Checked by containment, so a subdirectory of
-#: any of these is refused too.
+#: Repositories a query set must not live in, by name, checked by containment
+#: so a subdirectory of any of them is refused too. Three are public. The claim
+#: archive is private and is listed anyway: it holds vendor claim snapshots, and
+#: a query set filed there is misplaced rather than leaked, which is still wrong
+#: and is caught here cheaply.
 FORBIDDEN_ROOTS = (
     REPO_ROOT,                          # tooling
     WORKSPACE / "site",                 # citationrecord.org

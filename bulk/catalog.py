@@ -73,6 +73,13 @@ CATALOG: tuple = (
         purpose="Opinion cites opinion, with depth. For sampling later. Not "
                 "used for scoring.",
     ),
+    BulkFile(
+        key="parentheticals", stem="parentheticals", order=6,
+        purpose="Judge-written parenthetical descriptions of one opinion by "
+                "another. The source for negated-holding queries. Keys on "
+                "opinion ids, not cluster ids, so reaching a case's citation "
+                "or court from one needs the API per selected opinion.",
+    ),
 )
 
 BY_KEY = {f.key: f for f in CATALOG}
