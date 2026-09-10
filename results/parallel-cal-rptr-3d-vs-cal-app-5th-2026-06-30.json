@@ -1,0 +1,60 @@
+{
+  "arithmetic": {
+    "a_only_share_of_a": 0.8444140229748229,
+    "b_only_share_of_b": 0.012093726379440665
+  },
+  "artifact_kind": "exact_count",
+  "caveats": [
+    "This counts citations, not cases. A cluster carrying no citation in a reporter is not an absent case: the same decision may be held under the parallel reporter. Nothing here establishes that any case is missing from CourtListener.",
+    "The share of one reporter's clusters carrying no citation in the other is not a coverage gap. It is how citations are distributed between two reporters. Reading it as a gap is the error this artifact exists to make checkable.",
+    "Exact over the generation named, not sampled. It describes that bulk drop and is superseded by any later one.",
+    "Reporter names are matched exactly as the bulk table stores them. A zero count means the string did not appear, which is more often a misspelling than an absence.",
+    "Clusters are CourtListener's unit of decision. Where it holds duplicate records of one decision, that decision counts more than once."
+  ],
+  "citation_rows": {
+    "a": 16801,
+    "b": 2646,
+    "scanned": 18123788,
+    "without_cluster": 0
+  },
+  "citation_types": {
+    "a": {
+      "2": 16801
+    },
+    "b": {
+      "2": 2646
+    }
+  },
+  "clusters": {
+    "a_only": 14187,
+    "a_total": 16801,
+    "b_only": 32,
+    "b_total": 2646,
+    "both": 2614,
+    "either": 16833
+  },
+  "generation": "2026-06-30",
+  "measured_at_utc": "2026-09-10T03:24:18.856142Z",
+  "pair": {
+    "a": "Cal. Rptr. 3d",
+    "b": "Cal. App. 5th"
+  },
+  "provenance": {
+    "methodology_version": null,
+    "parallel_version": "0.1.0",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python_version": "3.11.9",
+    "tooling": {
+      "commit": "185a83bc7e626937cf0bb86097481208678c5478",
+      "dirty": false
+    }
+  },
+  "schema": "citationrecord.parallel.v1",
+  "source": {
+    "downloaded_at_utc": "2026-09-03T03:25:36.045501Z",
+    "file": "citations-2026-06-30.csv.bz2",
+    "manifest": "C:\\Users\\jbwagoner\\citationrecord\\bulk-data\\2026-06-30\\manifest.json",
+    "rows_declared": 18123788,
+    "sha256": "9b1f1481a0259273f0a673f05266fdf89049e3ec2906a0181d573d42f5e5ab4e"
+  }
+}
