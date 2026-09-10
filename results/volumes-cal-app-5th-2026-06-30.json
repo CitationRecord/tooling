@@ -74,7 +74,7 @@
     "8": 69,
     "9": 67
   },
-  "measured_at_utc": "2026-09-10T03:38:24.697997Z",
+  "measured_at_utc": "2026-09-10T03:57:40.144628Z",
   "measurements": [
     {
       "is_not": "a corpus coverage share",
@@ -101,16 +101,17 @@
     "platform": "Windows-10-10.0.26200-SP0",
     "python_version": "3.11.9",
     "tooling": {
-      "commit": "aa622409f698e0126c2768bb292c1b230e20e864",
+      "commit": "e688687c11392fa1f8bc3f6128b34a2bbefaed36",
       "dirty": false
     }
   },
   "reconstruction": {
+    "corroborated": true,
     "is_reconstruction": true,
-    "measures_differ": "The probe counted opinions per volume through the CourtListener API against the live index. This counts citation rows per volume in a named bulk generation. The two are related and not identical, so this reproduces the probe's shape, not its exact figures.",
-    "not_read_from": "the census scope probe's own output",
-    "note": "The census scope probe recorded nothing. Its output directory was never created and no probe artifact was ever committed, so the figures it produced cannot be read back. Everything here is recomputed from the deterministic sampling frame and a named bulk generation. That absence is the point rather than an aside: a per-volume sample rate with no record behind it was repeated as a corpus coverage share, and nothing existed to check it against.",
-    "probe_output_recorded": false,
+    "measures_differ": "The probe counted opinions per volume through the CourtListener API against the live index. This counts citation rows per volume in a named bulk generation. The two are related and not identical, so an exact agreement is evidence and not a guarantee.",
+    "note": "The census scope probe wrote no artifact. Its output directory was never created and nothing was committed, so its figures cannot be read back from any file. The first run's per-volume counts do survive, in the commit message that added the probe: F. Supp. 3d as 90, 99, 0, 0 and Cal. App. 5th as 74, 0, 0, 0. This reconstruction reproduces both exactly, so it is corroborated rather than merely plausible. A commit message carries no schema, no provenance stamp, no population and no caveats, which is how a 3-of-4 sample rate came to travel as a 75% coverage share.",
+    "probe_artifact_recorded": false,
+    "probe_output_recorded_in": "prose, in the commit message of CitationRecord/tooling 17e063c",
     "recomputed_from": "the bulk citations table and the census sampling frame"
   },
   "reporter": {
