@@ -302,6 +302,25 @@ def test_normalisation_folds_the_v_forms():
 # the artifact
 
 
+def test_a_malformed_case_name_is_rejected_not_repaired():
+    """A scorer reading "State v. . Starnes" wonders whether the query or the
+    corpus is broken. The corpus is the ground truth, so the candidate goes."""
+    check = _metadata_check([])
+    base = {"cluster_id": "1", "year": "1940", "reporter": "S.E.2d",
+            "volume": "11", "page": "553", "citation_shared": False}
+    for name in ("State v. . Starnes", "J.S. v.", "In re HH..", "Doe,, v. Roe"):
+        assert check(dict(base, case_name=name)) ==             "punctuation damage in the case name"
+
+
+def test_ordinary_case_names_survive_the_punctuation_check():
+    check = _metadata_check([])
+    base = {"cluster_id": "1", "year": "1940", "reporter": "S.E.2d",
+            "volume": "11", "page": "553", "citation_shared": False}
+    for name in ("Okke v. Okke (In re Okke)", "Sears, Roebuck & Co. v. Blade",
+                 "United States v. Pfirsch", "In re the Petition of Doheny"):
+        assert check(dict(base, case_name=name)) is None
+
+
 def test_a_shared_citation_is_rejected_at_draw_time():
     """Six cases matched one drawn citation and three matched another. The
     bulk table gives no sign of it, so the pool counts and the draw records."""

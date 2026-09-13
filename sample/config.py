@@ -62,6 +62,23 @@ DOCKET_NAME_PATTERNS = (
     r"\d{1,2}/\d{1,2}/\d{2,4}",
 )
 
+#: Punctuation damage in a case name, as "State v. . Starnes". The corpus
+#: stores these and they are not wrong about the case, but a scorer reading a
+#: malformed name wonders whether the query or the corpus is broken, and that
+#: doubt costs more than a redraw.
+#:
+#: Rejected rather than repaired, like a stray footnote marker: the corpus is
+#: the ground truth, and a name tidied here would no longer match the record
+#: it claims to quote.
+MALFORMED_NAME_PATTERNS = (
+    r"\s\.(?:\s|$)",        # a bare period standing as a word
+    r"\.\s*\.",             # doubled periods
+    r",\s*,",               # doubled commas
+    r"\(\s*\)",             # an empty parenthetical
+    r"^\s*[.,;:]",          # opening punctuation
+    r"\bv\.\s*(?:$|[.,])",  # a versus with nothing after it
+)
+
 #: Beyond this a case name is a caption fragment rather than a name, and a
 #: query built on it asks about something the reader cannot identify.
 MAX_CASE_NAME_LENGTH = 90

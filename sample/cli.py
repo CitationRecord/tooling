@@ -29,6 +29,7 @@ from . import exclude, pool as pool_mod, queryset, reviewed, truth
 from .config import (
     DEFAULT_WORKDIR,
     DOCKET_NAME_PATTERNS,
+    MALFORMED_NAME_PATTERNS,
     MAX_CASE_NAME_LENGTH,
     MAX_FILED_YEAR,
     UnsafeLocation,
@@ -115,6 +116,7 @@ def cmd_pool(args) -> int:
 
 
 _DOCKET_NAME = [re.compile(p) for p in DOCKET_NAME_PATTERNS]
+_MALFORMED_NAME = [re.compile(p) for p in MALFORMED_NAME_PATTERNS]
 
 
 def _metadata_check(lists):
@@ -137,6 +139,9 @@ def _metadata_check(lists):
         for pattern in _DOCKET_NAME:
             if pattern.search(name):
                 return "docket entry rather than a case name"
+        for pattern in _MALFORMED_NAME:
+            if pattern.search(name):
+                return "punctuation damage in the case name"
         if len(name) > MAX_CASE_NAME_LENGTH:
             return "case name longer than a case name"
 
