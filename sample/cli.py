@@ -14,6 +14,7 @@ after somebody has looked at the draw.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import sys
 from pathlib import Path
@@ -32,8 +33,31 @@ METADATA_PLAN = (("author", 2), ("year", 1), ("citation", 1))
 PARENTHETICAL_COUNT = 5
 
 
+def _utf8(stream):
+    """Console review is this component's one human-facing surface.
+
+    Windows consoles default to a codepage that cannot render the curly
+    quotes, dashes and section signs that legal text is full of, so a review
+    command left to the default prints replacement characters over exactly the
+    passages a reviewer is there to check. The data is fine; the display was
+    not.
+
+    Reconfigured in place rather than wrapped. A fresh TextIOWrapper around
+    stdout's buffer closes that buffer when it is collected, which silently
+    truncates every later line.
+    """
+    try:
+        stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+    return stream
+
+
+_STDOUT = _utf8(sys.stdout)
+
+
 def _out(message: str = "") -> None:
-    print(message, file=sys.stdout, flush=True)
+    print(message, file=_STDOUT, flush=True)
 
 
 def _note(message: str = "") -> None:
