@@ -25,7 +25,7 @@ from bulk.config import default_directory
 
 from . import CATEGORIES, METADATA_KINDS, __version__
 from . import draw as draw_mod
-from . import exclude, pool as pool_mod, queryset, reviewed
+from . import exclude, pool as pool_mod, queryset, reviewed, truth
 from .config import (
     DEFAULT_WORKDIR,
     DOCKET_NAME_PATTERNS,
@@ -308,12 +308,182 @@ def cmd_reject(args) -> int:
     return 0
 
 
+def _print_plan(plan) -> None:
+    _out(f"{len(plan.steps)} item(s) to resolve")
+    _out(f"  journal records to be written   {plan.journal_records}")
+    _out(f"  API requests, upper bound       {plan.request_count}")
+    _out("")
+    for step in plan.steps:
+        _out(f"[{step['query_id']}]  {step['kind']}")
+        for request in step["requests"]:
+            _out(f"    -> {request}")
+        _out(f"    writes: {step['writes']}")
+        _out("")
+
+
+def _resolve_metadata(query, resolver, client) -> bool:
+    subject = query["subject"]
+    resolution = resolver.resolve(subject["citation"])
+    if resolution.status != "resolved" or not resolution.cluster_id:
+        query["provenance"] = {"lookup": resolution.status,
+                               "reason": resolution.reason,
+                               "citation": subject["citation"]}
+        return False
+
+    base = {
+        "cluster_id": resolution.cluster_id,
+        "case_name": resolution.case_name,
+        "court": resolution.court,
+        "court_id": resolution.court_id,
+        "year": resolution.year,
+        "citation": subject["citation"],
+    }
+    provenance = {
+        "established_by": "resolve/ citation lookup, journalled",
+        "retrieved_at_utc": resolution.retrieved_at_utc,
+        "courtlistener_url": resolution.courtlistener_url,
+        "api": "courtlistener/v4",
+    }
+
+    kind = query["metadata_kind"]
+    if kind == "year":
+        query["ground_truth"] = {"answer": resolution.year, **base}
+    elif kind == "citation":
+        if not resolution.court:
+            query["provenance"] = {**provenance, "note": "no court returned"}
+            return False
+        query["text"] = query["text_template"].format(
+            case_name=subject["case_name"], court=resolution.court,
+            year=resolution.year)
+        query["ground_truth"] = {"answer": subject["citation"], **base}
+    else:
+        found = truth.majority_author(client, resolution.cluster_id)
+        provenance["author_lookup"] = {
+            "endpoint": f"opinions?cluster={resolution.cluster_id}",
+            "journalled": False,
+            "source": found["source"],
+        }
+        if not found["author"]:
+            query["provenance"] = provenance
+            return False
+        query["ground_truth"] = {"answer": found["author"],
+                                 "opinion_id": found["opinion_id"],
+                                 "opinion_type": found["opinion_type"], **base}
+    query["provenance"] = provenance
+    return True
+
+
+def _resolve_parenthetical(query, resolver, client) -> bool:
+    subject = query["subject"]
+    opinion = client._request(
+        "GET", f"opinions/{subject['described_opinion_id']}").json()
+    cluster_ref = str(opinion.get("cluster") or "")
+    cluster_id = cluster_ref.rstrip("/").split("/")[-1]
+    if not cluster_id.isdigit():
+        query["provenance"] = {"note": "opinion carries no cluster"}
+        return False
+
+    cluster = client.cluster(int(cluster_id))
+    citations = cluster.get("citations") or []
+    if not citations:
+        query["provenance"] = {"note": "cluster carries no citation",
+                               "cluster_id": cluster_id}
+        return False
+    first = citations[0]
+    citation = (f"{first.get('volume')} {first.get('reporter')} "
+                f"{first.get('page')}")
+
+    resolution = resolver.resolve(citation)
+    if resolution.status != "resolved" or not resolution.court:
+        query["provenance"] = {"lookup": resolution.status,
+                               "reason": resolution.reason,
+                               "citation": citation}
+        return False
+
+    query["text"] = query["text_template"].format(
+        jurisdiction=resolution.court, negated=query["negation"]["negated"])
+    query["ground_truth"] = {
+        "holding": query["negation"]["original"],
+        "held_by": resolution.case_name,
+        "citation": citation,
+        "cluster_id": resolution.cluster_id,
+        "court": resolution.court,
+        "court_id": resolution.court_id,
+        "year": resolution.year,
+        "note": ("The query asks for a case holding the opposite of this. "
+                 "Acceptable responses are recorded on the artifact."),
+    }
+    query["provenance"] = {
+        "established_by": "opinions fetch, then resolve/ citation lookup",
+        "opinion_endpoint": f"opinions/{subject['described_opinion_id']}",
+        "retrieved_at_utc": resolution.retrieved_at_utc,
+        "courtlistener_url": resolution.courtlistener_url,
+        "api": "courtlistener/v4",
+    }
+    return True
+
+
 def cmd_resolve(args) -> int:
-    _note("resolve is not implemented in this revision.")
-    _note("The draw is offline and complete; ground truth needs the resolver "
-          "wired in, which is the next commit and the first one that touches "
-          "the network.")
-    return 2
+    document = queryset.read(args.draft)
+    plan = truth.plan_for(document)
+
+    if args.dry_run:
+        _print_plan(plan)
+        _out("  Nothing was requested. Re-run without --dry-run to resolve.")
+        return 0
+
+    from resolve.cache import Cache
+    from resolve.client import CourtListener, MissingToken
+    from resolve.config import REPO_ROOT as RESOLVE_ROOT
+    from resolve.config import Config, load_env
+    from resolve.journal import Journal, run_provenance
+    from resolve.resolver import Resolver
+
+    load_env(RESOLVE_ROOT / ".env")
+    config = Config()
+    try:
+        client = CourtListener(config)
+    except MissingToken as exc:
+        _note(f"error: {exc}")
+        return 1
+
+    config.out_dir.mkdir(parents=True, exist_ok=True)
+    cache = Cache(config.cache_path, config.negative_max_age_days)
+    journal = Journal(config.journal_path, run_provenance())
+    resolver = Resolver(client, config, cache=cache, journal=journal)
+
+    _note(f"journal   {config.journal_path}")
+    resolved = failed = 0
+    try:
+        for query in document["queries"]:
+            if query["category"] == "metadata":
+                done = _resolve_metadata(query, resolver, client)
+            else:
+                done = _resolve_parenthetical(query, resolver, client)
+            resolved += 1 if done else 0
+            failed += 0 if done else 1
+            _note(f"  {query['id']:<26} "
+                  f"{'recorded' if done else 'INCOMPLETE'}")
+    finally:
+        client.close()
+        cache.close()
+
+    outstanding = [q["id"] for q in document["queries"]
+                   if not q.get("ground_truth")]
+    document["status"] = "complete" if not outstanding else "awaiting ground truth"
+    document["incomplete"] = outstanding
+    queryset.write(document, args.draft)
+
+    _out("")
+    _out(f"resolved {resolved} of {len(document['queries'])}")
+    if failed:
+        _out(f"  {failed} left incomplete rather than answered from a guess")
+    _out(f"  status  {document['status']}")
+    _out(f"  draft   {args.draft}")
+    _out("")
+    _out("  Commit and push the lookup journal. A verification that exists")
+    _out("  only on this machine is not yet a record of anything.")
+    return 0 if not failed else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -361,6 +531,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     resolver = subparsers.add_parser("resolve", help="record ground truth")
     resolver.add_argument("--draft", required=True, metavar="FILE")
+    resolver.add_argument("--dry-run", action="store_true",
+                          help="print what would be requested and written")
     common(resolver)
     resolver.set_defaults(func=cmd_resolve)
     return parser
