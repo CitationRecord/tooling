@@ -433,14 +433,14 @@ def cmd_resolve(args) -> int:
         return 0
 
     from resolve.cache import Cache
-    from resolve.client import CourtListener, MissingToken
+    from resolve.client import CourtListener, MissingToken, load_env
     from resolve.config import REPO_ROOT as RESOLVE_ROOT
-    from resolve.config import Config, load_env
+    from resolve.config import Config
     from resolve.journal import Journal, run_provenance
     from resolve.resolver import Resolver
 
     load_env(RESOLVE_ROOT / ".env")
-    config = Config()
+    config = Config().resolved()
     try:
         client = CourtListener(config)
     except MissingToken as exc:
