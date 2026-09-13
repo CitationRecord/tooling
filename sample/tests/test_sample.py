@@ -16,8 +16,10 @@ from sample.config import workdir
 from sample.draw import Draw, draw_key, new_seed, ordered, select
 from sample.exclude import ExclusionList, load, load_all, normalise
 from sample.negate import (
+    RULE_PROVENANCE,
     has_stray_marker,
     negate,
+    negator_governs_a_condition,
     opens_unbound,
     reject_reason,
     strip_prefix,
@@ -209,6 +211,30 @@ def test_the_three_negations_that_survived_review_still_survive():
     ):
         assert reject_reason(text) is None
         assert negate(text) is not None
+
+
+def test_a_negator_inside_a_condition_is_rejected():
+    """Deleting it flips the circumstance, not the claim. The source case held
+    the first and does not hold the opposite of the second."""
+    text = ("holding that ERISA applied when the employer could not carry out "
+            "its obligations with an unthinking, one-time application")
+    assert reject_reason(text) == "negator governs a condition, not the claim"
+    assert negator_governs_a_condition(text)
+
+
+def test_a_comma_set_off_subordinator_is_an_aside_not_a_clause():
+    """The heuristic the docstring names. Without it this good item is lost."""
+    text = ("holding that a defendant's true, if misleading, testimony cannot "
+            "support a conviction under the federal perjury statute")
+    assert not negator_governs_a_condition(text)
+    assert reject_reason(text) is None
+
+
+def test_the_rules_declare_themselves_empirical_and_not_exhaustive():
+    assert RULE_PROVENANCE["derivation"] == "empirical"
+    assert RULE_PROVENANCE["exhaustive"] is False
+    assert "incomplete rather than" in RULE_PROVENANCE["implication"]
+    assert any("heuristic" in h for h in RULE_PROVENANCE["heuristics"])
 
 
 def test_the_rule_is_recorded_on_the_result():

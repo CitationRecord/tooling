@@ -11,28 +11,48 @@ ambiguous and the result is often a different claim rather than a contrary one.
 A holding that already says "does not apply" has isolated exactly what is being
 denied, and deleting the denial inverts it cleanly.
 
-**Deletion-only is necessary and not sufficient.** Two further ways a
-mechanically valid deletion still fails, both found by reading a draw rather
-than by reasoning about one:
+**Deletion-only is necessary and not sufficient.** Three ways a mechanically
+valid deletion still fails:
 
 *The clause may carry an inference.* "Statements made as a union representative
 are not part of official police duties and thus are afforded First Amendment
 protection" deletes to "...are part of official duties and thus are afforded
 protection". The conclusion followed from the negated element, so removing the
 negation does not invert the claim, it breaks it. What comes out is incoherent
-rather than contrary, and no court could hold it. A candidate carrying an
-inferential connective is rejected.
+rather than contrary, and no court could hold it.
 
 *The clause may not stand alone.* "Their different procedural requirements do
 not render FLSA and state wage law class actions incompatible" inverts cleanly,
 but "their" refers to something in the surrounding opinion. Lifted into a query
 it refers to nothing, the proposition is not fully stated, and a system cannot
-properly be right or wrong about it. A candidate opening with an unbound
-pronoun is rejected.
+properly be right or wrong about it.
 
-Judging that a conclusion depends on its premise, or that a pronoun has no
-antecedent in the sentence, is grammar rather than doctrine. Neither requires
-knowing any law.
+*The negator may govern a condition rather than the claim.* "ERISA applied when
+the employer could not carry out its obligations with an unthinking, one-time
+application" deletes to a sentence that still says ERISA applied, under the
+opposite condition. The case held the first; it does not hold the opposite of
+the second. That is a different proposition rather than a contrary one, and
+ground truth for this category is supposed to be the case holding the opposite.
+
+Judging that a conclusion depends on its premise, that a pronoun has no
+antecedent in its own sentence, or that a negator sits inside a subordinate
+clause, is grammar rather than doctrine. None of it requires knowing any law.
+
+**The comma condition on the subordinate-clause rule is a heuristic rather than
+a parse.** It treats a subordinator set off by a comma as an aside and one that
+is not as opening a clause, which keeps "a defendant's true, if misleading,
+testimony cannot support a conviction" and rejects "ERISA applied when the
+employer could not". That distinction holds on the draws examined so far and is
+not a grammatical guarantee. It is better to say so here than to have the next
+person discover it.
+
+**How these rules were derived, which matters as much as what they are.** All
+three came from reading draws, not from reasoning about negation in advance.
+Deletion-only was designed first and looked sufficient; each insufficiency was
+found by looking at what it actually produced. That is evidence the rule set is
+incomplete rather than finished, and a fourth failure shape probably sits in the
+pool waiting for a draw to surface it. The rules are empirical, built from
+observed failures, and not proven exhaustive. Every artifact they touch says so.
 
 Every rule is named, and the name is recorded on the item it produced, so the
 transformation can be checked rather than trusted. Anything the rules cannot
@@ -46,6 +66,29 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+#: Carried into every query-set artifact. Not a caveat appended to the rules:
+#: a statement of where they came from, which bears on how far to trust them.
+RULE_PROVENANCE = {
+    "derivation": "empirical",
+    "how": (
+        "Every rejection rule beyond deletion-only was derived from reading a "
+        "draw and finding a negation that was mechanically valid and still "
+        "wrong. None was anticipated in advance."
+    ),
+    "exhaustive": False,
+    "implication": (
+        "Three insufficiencies in deletion-only were found by looking at three "
+        "draws. The rule set should be read as incomplete rather than "
+        "finished, and a further failure shape probably exists in the pool."
+    ),
+    "heuristics": [
+        "The comma condition on the subordinate-clause rule is a heuristic "
+        "rather than a parse: a subordinator set off by a comma is treated as "
+        "an aside, one that is not as opening a clause. It holds on the draws "
+        "examined so far and is not a grammatical guarantee."
+    ],
+}
 
 #: Auxiliaries and modals a bare "not" may follow. Deleting the "not" after one
 #: of these leaves a grammatical, emphatic positive: "does not apply" becomes
@@ -65,6 +108,9 @@ RULES = {
     "cannot-to-can": re.compile(r"\bcannot\b", re.IGNORECASE),
 }
 
+#: Any negator, for locating where in the sentence the negation sits.
+ANY_NEGATOR = re.compile(rf"\b(?:{_AUX})\s+not\b|\bcannot\b", re.IGNORECASE)
+
 #: Other ways a sentence carries negation. If one of these survives after the
 #: single negator is removed, the result is not a clean opposite.
 RESIDUAL_NEGATION = re.compile(
@@ -82,6 +128,15 @@ RESIDUAL_NEGATION = re.compile(
 INFERENTIAL = re.compile(
     r"\b(thus|therefore|accordingly|hence|consequently|ergo|"
     r"and\s+so|as\s+a\s+result|for\s+that\s+reason|it\s+follows)\b",
+    re.IGNORECASE,
+)
+
+#: A subordinating conjunction opening a clause. The negative lookbehind is the
+#: heuristic named in the module docstring: a subordinator preceded by a comma
+#: is treated as an aside rather than as opening a clause.
+SUBORDINATOR = re.compile(
+    r"(?<!,)\s\b(when|where|if|because|unless|although|though|while|since|"
+    r"whenever|wherever|provided)\b",
     re.IGNORECASE,
 )
 
@@ -136,6 +191,19 @@ def opens_unbound(body: str) -> bool:
     return bool(match) and match.group().lower() in UNBOUND_OPENERS
 
 
+def negator_governs_a_condition(text: str) -> bool:
+    """Whether the negator sits inside a subordinate clause.
+
+    If it does, deleting it flips the circumstance rather than the claim, and
+    the source case does not hold the opposite of what comes out.
+    """
+    negator = ANY_NEGATOR.search(text or "")
+    if negator is None:
+        return False
+    return any(match.start() < negator.start()
+               for match in SUBORDINATOR.finditer(text))
+
+
 @dataclass
 class Negation:
     """A holding, its opposite, and the rule that produced it."""
@@ -176,6 +244,8 @@ def reject_reason(text: str) -> str | None:
         return "stray footnote marker in the text"
     if INFERENTIAL.search(text):
         return "carries an inference; deleting the negator breaks it"
+    if negator_governs_a_condition(text):
+        return "negator governs a condition, not the claim"
 
     body = strip_prefix(text)
     if opens_unbound(body):

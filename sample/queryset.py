@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import DRAW_KEY, SCHEMA, __version__
+from .negate import RULE_PROVENANCE
 
 #: From Magesh et al. 2024, Appendix A.3.1. Taken from their appendix rather
 #: than devised here, and recorded as such.
@@ -76,6 +77,7 @@ def build(edition: str, generation: str, seed: str, sections: list,
             ],
         },
         "exclusions": exclusions,
+        "negation_rules": RULE_PROVENANCE,
         "acceptable_responses": {"negated-parenthetical": ACCEPTABLE_RESPONSES},
         "sources": sources,
         "queries": queries,
