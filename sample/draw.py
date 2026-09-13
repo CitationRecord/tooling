@@ -92,9 +92,17 @@ def select(candidates, seed: str, category: str, wanted: int, identify,
         result.examined += 1
         reason = check(candidate) if check else None
         if reason:
+            # A check may return a bare reason, or a (reason, by) pair where a
+            # person rather than a rule made the call. Both are recorded, and
+            # the artifact keeps them apart: a reviewer's judgment should never
+            # read as something a rule caught.
+            by = "rule"
+            if isinstance(reason, tuple):
+                reason, by = reason
             result.rejected.append({
                 "candidate_id": str(identify(candidate)),
                 "rule": reason,
+                "by": by,
             })
             continue
         result.taken.append(candidate)

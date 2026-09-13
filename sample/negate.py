@@ -11,8 +11,8 @@ ambiguous and the result is often a different claim rather than a contrary one.
 A holding that already says "does not apply" has isolated exactly what is being
 denied, and deleting the denial inverts it cleanly.
 
-**Deletion-only is necessary and not sufficient.** Three ways a mechanically
-valid deletion still fails:
+**Deletion-only is necessary and not sufficient.** Five ways a mechanically
+valid deletion still fails, every one of them found by reading a draw:
 
 *The clause may carry an inference.* "Statements made as a union representative
 are not part of official police duties and thus are afforded First Amendment
@@ -34,9 +34,20 @@ opposite condition. The case held the first; it does not hold the opposite of
 the second. That is a different proposition rather than a contrary one, and
 ground truth for this category is supposed to be the case holding the opposite.
 
+*The negator may sit under a report or a justification.* The same failure
+reached by a different construction: "harmless in light of the fact that the
+judge stated that he did not rely on the testimony" deletes to harmless
+*because* he did rely. The negation governs what was said, not what was held.
+
+*The text may carry print artifacts.* "testi- mony" is a line-break hyphen from
+the printed page flattened into the corpus. Rejected rather than repaired, like
+a stray footnote marker, because the original parenthetical is the recorded
+ground truth and has to keep matching the corpus it quotes.
+
 Judging that a conclusion depends on its premise, that a pronoun has no
-antecedent in its own sentence, or that a negator sits inside a subordinate
-clause, is grammar rather than doctrine. None of it requires knowing any law.
+antecedent in its own sentence, or that a negator sits inside a subordinate or
+reported clause, is grammar rather than doctrine. None of it requires knowing
+any law.
 
 **The comma condition on the subordinate-clause rule is a heuristic rather than
 a parse.** It treats a subordinator set off by a comma as an aside and one that
@@ -46,13 +57,34 @@ employer could not". That distinction holds on the draws examined so far and is
 not a grammatical guarantee. It is better to say so here than to have the next
 person discover it.
 
+**One shape is not mechanizable here at all.** "Five months is
+not close enough to show a causal connection" inverts cleanly, stands alone as a
+sentence, carries no inference and no unbound pronoun. It passes every rule
+above and is still not answerable, because "close enough" has no meaning without
+a doctrinal frame: temporal proximity appears in several doctrines with
+different thresholds, and which one is meant decides whether the proposition is
+even wrong.
+
+Catching that mechanically would mean recognising when a proposition is
+elliptical with respect to a legal standard, and that is legal knowledge. A rule
+for it would breach the boundary this component works within, which is that
+nothing here needs an attorney to state a correct answer. So the shape is named
+here rather than coded, and candidates of it are rejected by a reviewer through
+`reviewed.py`, which records the decision as data so the draw stays
+reproducible. A named gap is more useful to the next person than a rule
+pretending to cover it.
+
 **How these rules were derived, which matters as much as what they are.** All
-three came from reading draws, not from reasoning about negation in advance.
+of them came from reading draws, not from reasoning about negation in advance.
 Deletion-only was designed first and looked sufficient; each insufficiency was
-found by looking at what it actually produced. That is evidence the rule set is
-incomplete rather than finished, and a fourth failure shape probably sits in the
-pool waiting for a draw to surface it. The rules are empirical, built from
-observed failures, and not proven exhaustive. Every artifact they touch says so.
+found by looking at what it actually produced.
+
+The prediction that a further shape was waiting in the pool was made after the
+third rule and confirmed by the very next draw, which produced a negator
+embedded under "stated that" and a line-break hyphen flattened into the text.
+Five rules, all five found by looking, and the last two found immediately after
+someone said to expect more. The rules are empirical, built from observed
+failures, and not proven exhaustive. Every artifact they touch says so.
 
 Every rule is named, and the name is recorded on the item it produced, so the
 transformation can be checked rather than trusted. Anything the rules cannot
@@ -78,15 +110,35 @@ RULE_PROVENANCE = {
     ),
     "exhaustive": False,
     "implication": (
-        "Three insufficiencies in deletion-only were found by looking at three "
-        "draws. The rule set should be read as incomplete rather than "
-        "finished, and a further failure shape probably exists in the pool."
+        "Every insufficiency in deletion-only was found by looking at a draw, "
+        "never by anticipating it. A prediction that more shapes remained was "
+        "confirmed by the next draw. The rule set should be read as incomplete "
+        "rather than finished, and further failure shapes probably exist in "
+        "the pool."
     ),
     "heuristics": [
         "The comma condition on the subordinate-clause rule is a heuristic "
         "rather than a parse: a subordinator set off by a comma is treated as "
         "an aside, one that is not as opening a clause. It holds on the draws "
         "examined so far and is not a grammatical guarantee."
+    ],
+    "known_unmechanised": [
+        {
+            "shape": "elliptical with respect to a legal standard",
+            "example": "five months is not close enough to show a causal "
+                       "connection",
+            "why_no_rule": (
+                "It inverts cleanly, stands alone as a sentence, and carries "
+                "no inference or unbound pronoun, so every rule passes it. It "
+                "is still unanswerable, because \"close enough\" has no "
+                "meaning without a doctrinal frame and temporal proximity "
+                "appears in several doctrines with different thresholds. "
+                "Recognising that mechanically would require legal knowledge, "
+                "which is outside what this component may use, so candidates "
+                "of this shape are rejected by a reviewer and the decision is "
+                "recorded."
+            ),
+        }
     ],
 }
 
@@ -139,6 +191,28 @@ SUBORDINATOR = re.compile(
     r"whenever|wherever|provided)\b",
     re.IGNORECASE,
 )
+
+#: Constructions that put what follows them inside a report or a justification
+#: rather than in the claim itself. A negator after one of these governs what
+#: somebody said, or why something followed, and deleting it does not invert
+#: the holding.
+EMBEDDING = re.compile(
+    r"\b(?:stated|said|found|concluded|held|determined|reasoned|explained|"
+    r"noted|observed|testified|alleged|claimed|asserted|argued|acknowledged|"
+    r"recognized|recognised)\s+that\b"
+    r"|\bin\s+light\s+of\b"
+    r"|\bin\s+view\s+of\b"
+    r"|\bon\s+the\s+grounds?\s+that\b"
+    r"|\bby\s+reason\s+of\b"
+    r"|\bgiven\s+that\b",
+    re.IGNORECASE,
+)
+
+#: A line-break hyphen flattened into the text, as "testi- mony". The corpus
+#: carries these from the printed page. Rejected rather than repaired, for the
+#: same reason as a stray footnote marker: the original parenthetical is the
+#: recorded ground truth and must keep matching the corpus.
+BROKEN_HYPHENATION = re.compile(r"[A-Za-z]-\s+[a-z]")
 
 #: Pronouns and determiners whose antecedent lives outside the parenthetical.
 #: A clause opening with one of these does not state its own subject.
@@ -204,6 +278,21 @@ def negator_governs_a_condition(text: str) -> bool:
                for match in SUBORDINATOR.finditer(text))
 
 
+def negator_is_embedded(text: str) -> bool:
+    """Whether the negator sits under a report or a justification.
+
+    The same failure as a negator inside a condition, reached by a different
+    construction: "harmless in light of the fact that the judge stated that he
+    did not rely on the testimony" deletes to harmless *because* he did rely.
+    The negation governs what was said, not what was held.
+    """
+    negator = ANY_NEGATOR.search(text or "")
+    if negator is None:
+        return False
+    return any(match.start() < negator.start()
+               for match in EMBEDDING.finditer(text))
+
+
 @dataclass
 class Negation:
     """A holding, its opposite, and the rule that produced it."""
@@ -242,10 +331,14 @@ def reject_reason(text: str) -> str | None:
 
     if has_stray_marker(text):
         return "stray footnote marker in the text"
+    if BROKEN_HYPHENATION.search(text):
+        return "line-break hyphenation flattened into the text"
     if INFERENTIAL.search(text):
         return "carries an inference; deleting the negator breaks it"
     if negator_governs_a_condition(text):
         return "negator governs a condition, not the claim"
+    if negator_is_embedded(text):
+        return "negator sits inside a reported or justifying clause"
 
     body = strip_prefix(text)
     if opens_unbound(body):

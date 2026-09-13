@@ -25,7 +25,7 @@ from bulk.config import default_directory
 
 from . import CATEGORIES, METADATA_KINDS, __version__
 from . import draw as draw_mod
-from . import exclude, pool as pool_mod, queryset
+from . import exclude, pool as pool_mod, queryset, reviewed
 from .config import (
     DEFAULT_WORKDIR,
     DOCKET_NAME_PATTERNS,
@@ -172,14 +172,21 @@ def cmd_draw(args) -> int:
 
     seed = args.seed or draw_mod.new_seed()
     lists = exclude.load_all()
-    sections, queries_by_section = [], []
+    reviewed_path = reviewed.path_for(work, args.edition)
+    decisions = reviewed.load(reviewed_path)
+    sections = []
 
     meta = pools["metadata"]
     taken_clusters = set()
 
+    reviewed_metadata = reviewed.check(decisions, "metadata")
+
     def metadata_unique(candidate):
         if candidate["cluster_id"] in taken_clusters:
             return "cluster already used in this edition"
+        judged = reviewed_metadata(candidate["cluster_id"])
+        if judged:
+            return judged
         return _metadata_check(lists)(candidate)
 
     for kind, count in METADATA_PLAN:
@@ -196,10 +203,18 @@ def cmd_draw(args) -> int:
         sections.append(section)
 
     para = pools["negated-parenthetical"]
+    reviewed_para = reviewed.check(decisions, "negated-parenthetical")
+
+    def parenthetical_check(candidate):
+        judged = reviewed_para(candidate["parenthetical_id"])
+        if judged:
+            return judged
+        return _parenthetical_check(lists)(candidate)
+
     result = draw_mod.select(
         para["candidates"], seed, "negated-parenthetical",
         PARENTHETICAL_COUNT, identify=lambda c: c["parenthetical_id"],
-        check=_parenthetical_check(lists))
+        check=parenthetical_check)
     section = result.as_dict()
     section["filters"] = para["filters"]
     section["queries"] = []
@@ -215,6 +230,7 @@ def cmd_draw(args) -> int:
         seed=seed,
         sections=sections,
         exclusions=[entry.as_dict() for entry in lists],
+        reviewer_rejections=reviewed.entries(reviewed_path),
         sources=[{"category": c, "pool_file": _pool_path(
             work, c, args.generation).name,
             "pool_size": len(pools[c]["candidates"]),
@@ -268,6 +284,30 @@ def cmd_show(args) -> int:
     return 0
 
 
+def cmd_reject(args) -> int:
+    """Record a reviewer's rejection so the draw can consult it as data."""
+    try:
+        work = workdir(args.workdir)
+    except UnsafeLocation as refusal:
+        _note(str(refusal))
+        return 3
+    path = reviewed.path_for(work, args.edition)
+    try:
+        entry = reviewed.add(path, args.candidate, args.category,
+                             args.reason, args.by)
+    except ValueError as clash:
+        _note(str(clash))
+        return 1
+    _out(f"recorded  {entry['candidate_id']}  {entry['category']}")
+    _out(f"  reason  {entry['reason']}")
+    _out(f"  by      {entry['decided_by']} at {entry['decided_at_utc']}")
+    _out(f"  file    {path}")
+    _out("")
+    _out("  Redraw on the same seed. The candidate will appear in the")
+    _out("  rejection record marked as a reviewer decision, not a rule.")
+    return 0
+
+
 def cmd_resolve(args) -> int:
     _note("resolve is not implemented in this revision.")
     _note("The draw is offline and complete; ground truth needs the resolver "
@@ -307,6 +347,17 @@ def build_parser() -> argparse.ArgumentParser:
     shower = subparsers.add_parser("show", help="print a draft for review")
     shower.add_argument("--draft", required=True, metavar="FILE")
     shower.set_defaults(func=cmd_show)
+
+    rejecter = subparsers.add_parser(
+        "reject", help="record a reviewer rejection the draw will honour")
+    rejecter.add_argument("--edition", required=True, metavar="ID")
+    rejecter.add_argument("--candidate", required=True, metavar="ID")
+    rejecter.add_argument("--category", required=True, choices=CATEGORIES)
+    rejecter.add_argument("--reason", required=True, metavar="TEXT")
+    rejecter.add_argument("--by", required=True, metavar="NAME",
+                          help="who made the call")
+    rejecter.add_argument("--workdir", metavar="PATH")
+    rejecter.set_defaults(func=cmd_reject)
 
     resolver = subparsers.add_parser("resolve", help="record ground truth")
     resolver.add_argument("--draft", required=True, metavar="FILE")

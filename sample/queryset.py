@@ -57,7 +57,7 @@ def provenance() -> dict:
 
 
 def build(edition: str, generation: str, seed: str, sections: list,
-          exclusions: list, sources: list) -> dict:
+          exclusions: list, sources: list, reviewer_rejections=None) -> dict:
     """One query-set artifact, complete or not."""
     queries = [q for section in sections for q in section["queries"]]
     incomplete = [q["id"] for q in queries if not q.get("ground_truth")]
@@ -77,6 +77,7 @@ def build(edition: str, generation: str, seed: str, sections: list,
             ],
         },
         "exclusions": exclusions,
+        "reviewer_rejections": list(reviewer_rejections or []),
         "negation_rules": RULE_PROVENANCE,
         "acceptable_responses": {"negated-parenthetical": ACCEPTABLE_RESPONSES},
         "sources": sources,
