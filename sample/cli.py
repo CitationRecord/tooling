@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -25,7 +26,14 @@ from bulk.config import default_directory
 from . import CATEGORIES, METADATA_KINDS, __version__
 from . import draw as draw_mod
 from . import exclude, pool as pool_mod, queryset
-from .config import DEFAULT_WORKDIR, UnsafeLocation, workdir
+from .config import (
+    DEFAULT_WORKDIR,
+    DOCKET_NAME_PATTERNS,
+    MAX_CASE_NAME_LENGTH,
+    MAX_FILED_YEAR,
+    UnsafeLocation,
+    workdir,
+)
 from .negate import negate, reject_reason
 
 #: Category A: two authorship, one year, one citation.
@@ -106,25 +114,43 @@ def cmd_pool(args) -> int:
     return 0
 
 
+_DOCKET_NAME = [re.compile(p) for p in DOCKET_NAME_PATTERNS]
+
+
 def _metadata_check(lists):
+    """Draw-time checks, so every rejection is recorded with its rule.
+
+    These could have been pool filters. They are not, because a candidate
+    filtered out during the pool build leaves no trace, and a draw that cannot
+    say what it passed over is only half a record.
+    """
     def check(candidate):
-        why = exclude.reason_any(
-            lists, name=candidate.get("case_name"),
+        name = candidate.get("case_name") or ""
+
+        year = candidate.get("year") or ""
+        if not year.isdigit() or int(year) > MAX_FILED_YEAR:
+            return f"filed after {MAX_FILED_YEAR}, too recent to be uncited"
+
+        # Docket shapes are checked before length. Such a name is usually also
+        # over-long, and the specific reason is worth more in the record than
+        # the symptom it causes.
+        for pattern in _DOCKET_NAME:
+            if pattern.search(name):
+                return "docket entry rather than a case name"
+        if len(name) > MAX_CASE_NAME_LENGTH:
+            return "case name longer than a case name"
+
+        return exclude.reason_any(
+            lists, name=name,
             citation=f"{candidate['volume']} {candidate['reporter']} "
                      f"{candidate['page']}",
             cluster_id=candidate.get("cluster_id"))
-        return why
     return check
 
 
 def _parenthetical_check(lists):
     def check(candidate):
-        why = reject_reason(candidate.get("text", ""))
-        if why:
-            return why
-        return exclude.reason_any(lists, name=None,
-                                  citation=None,
-                                  cluster_id=None)
+        return reject_reason(candidate.get("text", ""))
     return check
 
 
@@ -228,7 +254,11 @@ def cmd_show(args) -> int:
         if query.get("text"):
             _out(f"  Q  {query['text']}")
         else:
-            _out(f"  Q  (awaiting jurisdiction) {query['text_template']}")
+            _out(f"  Q  (awaiting resolve) {query.get('text_template')}")
+        if query.get("subject", {}).get("case_name"):
+            s = query["subject"]
+            _out(f"  re {s['case_name']}, {s['citation']} ({s['year']}), "
+                 f"cited {s.get('citation_count')} time(s)")
         if query.get("negation"):
             _out(f"  -  {query['negation']['original']}")
             _out(f"  +  {query['negation']['negated']}")

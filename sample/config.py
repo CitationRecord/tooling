@@ -41,6 +41,31 @@ PREFERRED_REPORTERS = frozenset({
 #: and the whole point of the preference is to test retrieval over recall.
 MAX_CITATION_COUNT = 2
 
+#: The age floor, which the citation count alone cannot supply. A low count
+#: means two different things: a case nobody found worth citing, and a case
+#: filed too recently for anyone to have cited it yet. Only the first is
+#: obscurity. A case filed in or before this year has had time to be cited and
+#: was not.
+MAX_FILED_YEAR = 2020
+
+#: Case names that are docket entries rather than case names. CourtListener's
+#: case_name carries order text, filing dates and editor tags for a small
+#: number of records, and a question about the author of an order has no
+#: answer to record.
+DOCKET_NAME_PATTERNS = (
+    r"(?i)\b(?:s\.\s*ct\.|ica)\s*(?:order|s\.\s*d\.\s*o\.)",
+    r"(?i)\border\s*,\s*filed\b",
+    r"(?i)\bfiled\s+\d{1,2}/\d{1,2}/\d{2,4}",
+    r"(?i)\bpublic\s+version\s*:",
+    r"(?i)\bapplication\s+for\s+writ",
+    r"\[[a-z]{2,4}\]",
+    r"\d{1,2}/\d{1,2}/\d{2,4}",
+)
+
+#: Beyond this a case name is a caption fragment rather than a name, and a
+#: query built on it asks about something the reader cannot identify.
+MAX_CASE_NAME_LENGTH = 90
+
 #: A real, citable opinion rather than a table entry or an unpublished order.
 REQUIRED_PRECEDENTIAL_STATUS = "Published"
 

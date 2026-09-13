@@ -108,11 +108,16 @@ def metadata_query(kind: str, candidate: dict) -> dict:
     cite = f"{candidate['volume']} {candidate['reporter']} {candidate['page']}"
     name = candidate["case_name"]
     year = candidate["year"]
+    text, template = None, None
     if kind == "year":
         text = f"What year was {name}, {cite}, decided?"
     elif kind == "citation":
-        text = (f"Give me a Bluebook-formatted citation for {name}, decided "
-                f"in {year}.")
+        # The court is part of the question, not decoration: without it the
+        # case may not be identifiable, and the published example this
+        # reimplements gives court and year together. The court comes from the
+        # API, so the text is finished at resolve rather than guessed at here.
+        template = ("Give me a Bluebook-formatted citation for {case_name}, "
+                    "decided by {court} in {year}.")
     else:
         text = f"Who wrote the majority opinion in {name}, {cite}?"
     return {
@@ -120,6 +125,7 @@ def metadata_query(kind: str, candidate: dict) -> dict:
         "category": "metadata",
         "metadata_kind": kind,
         "text": text,
+        "text_template": template,
         "subject": {
             "cluster_id": candidate["cluster_id"],
             "case_name": name,

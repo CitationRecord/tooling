@@ -11,11 +11,11 @@ import pytest
 
 from register.config import UnsafeLocation
 from sample import DRAW_KEY, METADATA_KINDS
-from sample.cli import METADATA_PLAN, main
+from sample.cli import METADATA_PLAN, _metadata_check, main
 from sample.config import workdir
 from sample.draw import Draw, draw_key, new_seed, ordered, select
 from sample.exclude import ExclusionList, load, load_all, normalise
-from sample.negate import negate, reject_reason
+from sample.negate import has_stray_marker, negate, reject_reason
 from sample.queryset import ACCEPTABLE_RESPONSES, metadata_query
 
 
@@ -221,6 +221,69 @@ def test_the_metadata_plan_is_two_authorship_one_year_one_citation():
     assert dict(METADATA_PLAN) == {"author": 2, "year": 1, "citation": 1}
     assert sum(n for _, n in METADATA_PLAN) == 4
     assert set(dict(METADATA_PLAN)) <= set(METADATA_KINDS)
+
+
+def test_the_citation_query_waits_for_the_court():
+    """Without the court the case may not be identifiable, and the court only
+    exists after resolve. A finished-looking text would be under-specified."""
+    candidate = {"cluster_id": "7", "case_name": "Doe v. Roe",
+                 "reporter": "F. Supp.", "volume": "300", "page": "1",
+                 "year": "1997", "citation_count": 1}
+    query = metadata_query("citation", candidate)
+    assert query["text"] is None
+    assert "{court}" in query["text_template"]
+
+
+def test_the_year_and_author_queries_are_final_at_draw_time():
+    candidate = {"cluster_id": "7", "case_name": "Doe v. Roe",
+                 "reporter": "F. Supp.", "volume": "300", "page": "1",
+                 "year": "1997", "citation_count": 1}
+    for kind in ("year", "author"):
+        query = metadata_query(kind, candidate)
+        assert query["text"] and query["text_template"] is None
+
+
+def test_a_recent_case_is_rejected_however_few_times_it_is_cited():
+    """citation_count <= 2 conflates unremarkable with not-yet-cited."""
+    check = _metadata_check([])
+    recent = {"cluster_id": "1", "case_name": "Doe v. Roe", "year": "2025",
+              "reporter": "P.3d", "volume": "565", "page": "754"}
+    assert "too recent" in check(recent)
+    older = dict(recent, year="2007")
+    assert check(older) is None
+
+
+def test_a_docket_entry_is_not_a_case_name():
+    check = _metadata_check([])
+    junk = {"cluster_id": "1", "year": "2019", "reporter": "P.3d",
+            "volume": "565", "page": "754",
+            "case_name": "In re: The Petition for the Coordination of Maui "
+                         "Fire Cases. S.Ct. Order, filed 02/10/2025 [ada]."}
+    assert check(junk) == "docket entry rather than a case name"
+
+
+def test_an_over_long_name_is_a_caption_fragment():
+    check = _metadata_check([])
+    candidate = {"cluster_id": "1", "year": "2019", "reporter": "P.3d",
+                 "volume": "1", "page": "1", "case_name": "A" * 120}
+    assert check(candidate) == "case name longer than a case name"
+
+
+def test_a_stray_footnote_marker_is_rejected_not_repaired():
+    """The original parenthetical is the ground truth. Editing it would leave
+    the record disagreeing with the corpus it claims to quote."""
+    text = ("holding that the State does not have to satisfy the prong of the "
+            "test to be entitled to a lesser-included offense 13 instruction")
+    assert reject_reason(text) == "stray footnote marker in the text"
+    assert has_stray_marker(text)
+
+
+def test_a_number_with_a_word_explaining_it_is_kept():
+    for text in ("holding that Section 1983 liability cannot be based upon a "
+                 "theory of respondeat superior or vicarious liability",
+                 "holding that the trustee is not an \"individual\" under "
+                 "former section 362 of the Bankruptcy Code as then written"):
+        assert not has_stray_marker(text)
 
 
 def test_a_metadata_query_carries_its_subject_and_no_answer_yet():

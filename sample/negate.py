@@ -53,8 +53,40 @@ RESIDUAL_NEGATION = re.compile(
     re.IGNORECASE,
 )
 
+#: Words that explain a number following them. Anything else followed by a bare
+#: small integer in the middle of prose is a footnote marker that was flattened
+#: into the parenthetical text, and it reads as nonsense inside a query.
+NUMBER_CUES = frozenset({
+    "section", "sections", "rule", "rules", "title", "chapter", "article",
+    "paragraph", "paragraphs", "subsection", "clause", "amendment", "part",
+    "act", "no", "number", "form", "count", "claim", "docket", "page", "at",
+    "under", "within", "exceeds", "exceeding", "least", "most", "than",
+})
+
+_NUMBER_IN_PROSE = re.compile(
+    r"\b([A-Za-z][A-Za-z'\-]{2,})\s+(\d{1,3})\s+([A-Za-z][A-Za-z'\-]{2,})\b")
+
 MAX_LENGTH = 220
 MIN_LENGTH = 60
+
+
+def has_stray_marker(text: str) -> bool:
+    """A small number sitting in prose with no word in front to explain it.
+
+    Such a candidate is rejected rather than repaired. The original
+    parenthetical is the recorded ground truth, so editing it would leave the
+    record disagreeing with the corpus it claims to quote, and a later
+    verification against CourtListener would fail on our own edit. The pool is
+    large enough that discarding is free.
+
+    Written out rather than packed into a pattern with a negative lookahead,
+    because the lookahead version was not anchored to a word boundary and so
+    matched inside words.
+    """
+    for before, _number, _after in _NUMBER_IN_PROSE.findall(text or ""):
+        if before.lower() not in NUMBER_CUES:
+            return True
+    return False
 
 
 @dataclass
@@ -92,6 +124,9 @@ def reject_reason(text: str) -> str | None:
         return "no removable negator"
     if hits > 1:
         return "more than one negator, scope ambiguous"
+
+    if has_stray_marker(text):
+        return "stray footnote marker in the text"
 
     body = strip_prefix(text)
     remainder = _apply(body)
