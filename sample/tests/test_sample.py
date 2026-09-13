@@ -15,7 +15,13 @@ from sample.cli import METADATA_PLAN, _metadata_check, main
 from sample.config import workdir
 from sample.draw import Draw, draw_key, new_seed, ordered, select
 from sample.exclude import ExclusionList, load, load_all, normalise
-from sample.negate import has_stray_marker, negate, reject_reason
+from sample.negate import (
+    has_stray_marker,
+    negate,
+    opens_unbound,
+    reject_reason,
+    strip_prefix,
+)
 from sample.queryset import ACCEPTABLE_RESPONSES, metadata_query
 
 
@@ -148,6 +154,61 @@ def test_a_non_holding_parenthetical_is_rejected():
     text = ("noting that the statute does not apply to municipalities or to "
             "their contractors under the agreement")
     assert reject_reason(text) == "not a holding-that parenthetical"
+
+
+def test_an_inference_is_rejected_because_deleting_the_negator_breaks_it():
+    """Deletion-only is necessary and not sufficient.
+
+    The conclusion follows from the negated element, so removing the negation
+    does not invert the claim, it breaks it. What comes out is incoherent
+    rather than contrary, and a system cannot sensibly answer it.
+    """
+    text = ("holding that statements made as a union representative are not "
+            "part of official police duties and thus are afforded First "
+            "Amendment protection")
+    assert reject_reason(text) == \
+        "carries an inference; deleting the negator breaks it"
+    assert negate(text) is None
+
+
+def test_every_inferential_connective_disqualifies():
+    stem = ("holding that the rule does not apply to the parties here %s it "
+            "governs only later agreements")
+    for word in ("thus", "therefore", "accordingly", "hence", "consequently",
+                 "and so"):
+        assert reject_reason(stem % word) is not None
+
+
+def test_an_unbound_pronoun_is_rejected_because_it_does_not_stand_alone():
+    """In the parenthetical "their" refers to the surrounding opinion. Lifted
+    into a query it refers to nothing."""
+    text = ("holding that their different procedural requirements do not "
+            "render FLSA and state wage law class actions incompatible")
+    assert reject_reason(text) == \
+        "opens with an unbound pronoun; does not stand alone"
+    assert negate(text) is None
+
+
+def test_a_pronoun_later_in_the_clause_is_not_a_rejection():
+    """Only the opener leaves the subject unstated."""
+    text = ("holding that the statute does not reach a contractor where their "
+            "work was performed wholly outside the state")
+    assert not opens_unbound(strip_prefix(text))
+
+
+def test_the_three_negations_that_survived_review_still_survive():
+    """Kept from a real draw, so a later loosening of these rules is visible."""
+    for text in (
+        "holding that the “needs of the child” are not determined by "
+        "the parents’ ability to pay or the lifestyle of the family",
+        "holding that a statutory requirement of actual or constructive notice "
+        "was not unconstitutionally vague",
+        "holding that statutory provision governing review of single agency "
+        "actions does not apply to challenge to a practice or procedure "
+        "employed in making decisions generally",
+    ):
+        assert reject_reason(text) is None
+        assert negate(text) is not None
 
 
 def test_the_rule_is_recorded_on_the_result():

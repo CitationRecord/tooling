@@ -11,6 +11,29 @@ ambiguous and the result is often a different claim rather than a contrary one.
 A holding that already says "does not apply" has isolated exactly what is being
 denied, and deleting the denial inverts it cleanly.
 
+**Deletion-only is necessary and not sufficient.** Two further ways a
+mechanically valid deletion still fails, both found by reading a draw rather
+than by reasoning about one:
+
+*The clause may carry an inference.* "Statements made as a union representative
+are not part of official police duties and thus are afforded First Amendment
+protection" deletes to "...are part of official duties and thus are afforded
+protection". The conclusion followed from the negated element, so removing the
+negation does not invert the claim, it breaks it. What comes out is incoherent
+rather than contrary, and no court could hold it. A candidate carrying an
+inferential connective is rejected.
+
+*The clause may not stand alone.* "Their different procedural requirements do
+not render FLSA and state wage law class actions incompatible" inverts cleanly,
+but "their" refers to something in the surrounding opinion. Lifted into a query
+it refers to nothing, the proposition is not fully stated, and a system cannot
+properly be right or wrong about it. A candidate opening with an unbound
+pronoun is rejected.
+
+Judging that a conclusion depends on its premise, or that a pronoun has no
+antecedent in the sentence, is grammar rather than doctrine. Neither requires
+knowing any law.
+
 Every rule is named, and the name is recorded on the item it produced, so the
 transformation can be checked rather than trusted. Anything the rules cannot
 handle is rejected: the candidate pool is large enough that discarding costs
@@ -53,6 +76,22 @@ RESIDUAL_NEGATION = re.compile(
     re.IGNORECASE,
 )
 
+#: Words marking a conclusion drawn from what precedes them. Where the
+#: conclusion rests on the negated element, deleting the negation breaks the
+#: inference instead of inverting the claim.
+INFERENTIAL = re.compile(
+    r"\b(thus|therefore|accordingly|hence|consequently|ergo|"
+    r"and\s+so|as\s+a\s+result|for\s+that\s+reason|it\s+follows)\b",
+    re.IGNORECASE,
+)
+
+#: Pronouns and determiners whose antecedent lives outside the parenthetical.
+#: A clause opening with one of these does not state its own subject.
+UNBOUND_OPENERS = frozenset({
+    "their", "theirs", "its", "his", "her", "hers", "this", "that", "these",
+    "those", "such", "it", "they", "he", "she", "him", "them", "said",
+})
+
 #: Words that explain a number following them. Anything else followed by a bare
 #: small integer in the middle of prose is a footnote marker that was flattened
 #: into the parenthetical text, and it reads as nonsense inside a query.
@@ -65,6 +104,8 @@ NUMBER_CUES = frozenset({
 
 _NUMBER_IN_PROSE = re.compile(
     r"\b([A-Za-z][A-Za-z'\-]{2,})\s+(\d{1,3})\s+([A-Za-z][A-Za-z'\-]{2,})\b")
+
+_FIRST_WORD = re.compile(r"[A-Za-z']+")
 
 MAX_LENGTH = 220
 MIN_LENGTH = 60
@@ -87,6 +128,12 @@ def has_stray_marker(text: str) -> bool:
         if before.lower() not in NUMBER_CUES:
             return True
     return False
+
+
+def opens_unbound(body: str) -> bool:
+    """Whether the clause begins with a pronoun that names nothing in it."""
+    match = _FIRST_WORD.search(body or "")
+    return bool(match) and match.group().lower() in UNBOUND_OPENERS
 
 
 @dataclass
@@ -127,8 +174,13 @@ def reject_reason(text: str) -> str | None:
 
     if has_stray_marker(text):
         return "stray footnote marker in the text"
+    if INFERENTIAL.search(text):
+        return "carries an inference; deleting the negator breaks it"
 
     body = strip_prefix(text)
+    if opens_unbound(body):
+        return "opens with an unbound pronoun; does not stand alone"
+
     remainder = _apply(body)
     if remainder is None:
         return "no removable negator"
