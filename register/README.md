@@ -36,6 +36,21 @@ on one machine is not yet a record of anything.
     1   already registered with identical content, or verification failed
     2   no such file, or a --supersedes naming no record
     3   the artifact is somewhere an unpublished artifact must not be
+    4   the artifact declares registrable: false
+
+## Artifacts that refuse to be registered
+
+Any artifact may carry `registrable: false` at its top level, with a
+`registrable_reason` saying why. `add` refuses it and exits 4.
+
+This is a general contract rather than a special case for one kind of file. A
+review packet pending sign-off, a partial query set, a draft of anything: each
+can decline registration in one line, and nothing here needs to know what any
+of them are.
+
+Flipping the flag means editing the file. That shows in a diff, which is the
+point: a set becomes registrable by a visible decision rather than by someone
+forgetting it was not.
 
 ## The destination guard
 

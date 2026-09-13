@@ -56,6 +56,7 @@ class ExclusionList:
     case_names: set = field(default_factory=set)
     citations: set = field(default_factory=set)
     cluster_ids: set = field(default_factory=set)
+    topics: list = field(default_factory=list)
 
     @property
     def coverage_fraction(self) -> float | None:
@@ -76,7 +77,26 @@ class ExclusionList:
     def excludes_cluster(self, cluster_id) -> bool:
         return str(cluster_id) in self.cluster_ids
 
-    def reason(self, name=None, citation=None, cluster_id=None) -> str | None:
+    def excludes_topic(self, question: str) -> str | None:
+        """Which listed topic a question covers, if any.
+
+        Case names and citations are the wrong key for some categories. A
+        collision with a prior benchmark's local-rules or circuit-split item is
+        the same court and the same rule, or the same circuit and the same
+        statutory question, and no case name is involved at all. A topic
+        matches when every one of its terms appears.
+        """
+        folded = normalise(question)
+        if not folded:
+            return None
+        for topic in self.topics:
+            terms = [normalise(t) for t in topic.get("all_of", []) if t]
+            if terms and all(term in folded for term in terms):
+                return topic.get("description") or topic.get("id")
+        return None
+
+    def reason(self, name=None, citation=None, cluster_id=None,
+               question=None) -> str | None:
         """Why a candidate is excluded, or None if it is not."""
         if cluster_id is not None and self.excludes_cluster(cluster_id):
             return f"cluster in {self.source}"
@@ -84,6 +104,10 @@ class ExclusionList:
             return f"citation in {self.source}"
         if name and self.excludes_name(name):
             return f"case name in {self.source}"
+        if question:
+            topic = self.excludes_topic(question)
+            if topic:
+                return f"topic in {self.source}: {topic}"
         return None
 
     def as_dict(self) -> dict:
@@ -97,6 +121,7 @@ class ExclusionList:
             "case_names": sorted(self.case_names),
             "citations": sorted(self.citations),
             "cluster_ids": sorted(self.cluster_ids),
+            "topics": list(self.topics),
         }
 
 
@@ -112,6 +137,7 @@ def load(path) -> ExclusionList:
         case_names={normalise(n) for n in body.get("case_names", []) if n},
         citations={normalise(c) for c in body.get("citations", []) if c},
         cluster_ids={str(c) for c in body.get("cluster_ids", [])},
+        topics=list(body.get("topics", [])),
     )
 
 
@@ -123,9 +149,11 @@ def load_all(directory=None) -> list:
     return [load(p) for p in sorted(directory.glob("*.json"))]
 
 
-def reason_any(lists, name=None, citation=None, cluster_id=None) -> str | None:
+def reason_any(lists, name=None, citation=None, cluster_id=None,
+               question=None) -> str | None:
     for entry in lists:
-        why = entry.reason(name=name, citation=citation, cluster_id=cluster_id)
+        why = entry.reason(name=name, citation=citation,
+                           cluster_id=cluster_id, question=question)
         if why:
             return why
     return None

@@ -51,6 +51,28 @@ def _describe(record: dict) -> str:
             f"{record['registered_at_utc']}")
 
 
+def refuses_registration(path):
+    """Whether an artifact declares itself unregistrable, and why.
+
+    A general contract rather than a special case: any artifact may carry
+    registrable: false at its top level, and this refuses to hash it. A review
+    packet pending sign-off, a partial query set, a draft of anything, each can
+    decline in one line and nothing here needs to know what any of them are.
+
+    Flipping the flag means editing the file, which shows in a diff. A set
+    becomes registrable by a visible decision rather than by someone forgetting
+    it was not.
+    """
+    try:
+        body = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(body, dict) or body.get("registrable") is not False:
+        return None
+    return (body.get("registrable_reason")
+            or "the artifact carries registrable: false and gives no reason")
+
+
 def cmd_add(args) -> int:
     journal = _journal(args)
     try:
@@ -61,6 +83,15 @@ def cmd_add(args) -> int:
     if not artifact.is_file():
         _note(f"no such file: {artifact}")
         return 2
+
+    refusal = refuses_registration(artifact)
+    if refusal:
+        _note(f"refusing to register {artifact.name}: {refusal}")
+        _note("The artifact declares registrable: false. Registering it would "
+              "fix content that is not meant to be fixed. To register it "
+              "anyway, change that flag in the file, where the change is "
+              "visible in a diff.")
+        return 4
 
     digest = digest_file(artifact)
     existing = find_by_digest(journal, digest)

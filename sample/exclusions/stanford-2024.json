@@ -1,12 +1,11 @@
 {
   "source": "Magesh et al. 2024",
   "citation": "Varun Magesh, Faiz Surani, Matthew Dahl, Mirac Suzgun, Christopher D. Manning, Daniel E. Ho, \"Hallucination-Free? Assessing the Reliability of Leading AI Legal Research Tools\", arXiv:2405.20362; Journal of Empirical Legal Studies (2025). Preregistered at osf.io/etzp2 on 22 March 2024.",
-  "coverage": "PARTIAL. Covers the 15 example queries printed verbatim in Appendix A, one per category, and the cases named in them. It does NOT cover the other 187 items. The full set is not publicly obtainable: the OSF registration returns 'Authentication credentials were not provided' to the API, and the publisher returns 403 to automated requests. Any artifact relying on this list must state the coverage rather than imply a complete check.",
+  "coverage": "PARTIAL. Covers the 15 example queries printed verbatim in Appendix A, one per category, the cases named in them, and the four topics those examples cover in the categories this project reimplements. It does NOT cover the other 187 items. The full set is not publicly obtainable: the OSF registration returns 'Authentication credentials were not provided' to the API, and the publisher returns 403 to automated requests. Any artifact relying on this list must state the coverage rather than imply a complete check.",
   "items_covered": 15,
   "items_total": 202,
   "retrieved_at_utc": "2026-09-13",
   "retrieved_from": "arXiv:2405.20362 Appendix A, extracted from the PDF",
-
   "case_names": [
     "Sears, Roebuck & Co. v. Blade",
     "Riley v. Albany Savings Bank",
@@ -14,19 +13,50 @@
     "Nassau Smelting & Refining Works, Ltd. v. United States",
     "United States v. Pfirsch"
   ],
-
   "citations": [
     "103 N.Y. 669",
     "315 F. Supp. 841",
     "266 U.S. 101",
     "256 U.S. 547"
   ],
-
   "cluster_ids": [],
-
   "notes": {
     "cluster_ids": "Empty by design. The paper names cases, not CourtListener cluster ids. Resolving these names to clusters would add ids here and make the check exact for the cases it covers; it would not widen coverage beyond 15 of 202.",
     "A.3.1": "The Colorado pro se attorney's fees example names no case, so only the proposition is known and nothing can be excluded by identity.",
-    "overlapping_categories": "Their A.4.1 (Metadata: Citation, 10), A.4.2 (Metadata: Year, 10), A.4.3 (Metadata: Author, 10) and A.3.1 (False Holding Statements, 10) are the four categories this component reimplements. Those 40 items are where collision would occur, and 4 of the 40 are covered here."
-  }
+    "overlapping_categories": "Their A.4.1 (Metadata: Citation, 10), A.4.2 (Metadata: Year, 10), A.4.3 (Metadata: Author, 10) and A.3.1 (False Holding Statements, 10) are the four categories this component reimplements. Those 40 items are where collision would occur, and 4 of the 40 are covered here.",
+    "topics": "Case names and citations are the wrong key for the local-rules, circuit-split and changes-in-law categories: a collision there is the same court and the same rule, or the same circuit and the same statutory question, with no case name involved. These four are the topics their printed examples cover in the categories this project reimplements, so the topic check covers 4 of the 40 items that could collide."
+  },
+  "topics": [
+    {
+      "id": "sd-indiana-rule-45-notice",
+      "description": "Southern District of Indiana, notice to other parties before serving a Rule 45 subpoena on a non-party (their A.2.4, Local Rules)",
+      "all_of": [
+        "southern district of indiana",
+        "rule 45"
+      ]
+    },
+    {
+      "id": "sixth-circuit-1324-harboring-intent",
+      "description": "Sixth Circuit, whether harboring under 8 U.S.C. 1324 requires proof of intent (their A.2.2, Circuit Splits)",
+      "all_of": [
+        "sixth circuit",
+        "1324"
+      ]
+    },
+    {
+      "id": "eighth-circuit-vra-section-2-private-right",
+      "description": "Eighth Circuit, whether a private litigant may sue under Section 2 of the Voting Rights Act (their A.2.3, Changes in Law)",
+      "all_of": [
+        "eighth circuit",
+        "voting rights act"
+      ]
+    },
+    {
+      "id": "near-miss-doctrine",
+      "description": "The near miss doctrine (their A.1.4, Doctrine Test)",
+      "all_of": [
+        "near miss doctrine"
+      ]
+    }
+  ]
 }

@@ -1,15 +1,22 @@
-# `archive/` — claim archiver
+# `archive/` — public document archiver
 
-Snapshots, hashes, and logs the public vendor claims tracked in the system
-profiles of methodology §7.
+Snapshots, hashes, and logs public documents whose publisher can change them:
+the vendor claims tracked in the system profiles of methodology §7, and the
+court rules that ground-truth local-rules questions.
 
-A claim in a published profile has to be quotable months after the vendor
-edits the page it came from. This component produces that evidence: a rendered
-HTML snapshot, a screenshot, a SHA-256 over the HTML, a third-party copy in the
-Wayback Machine, and an append-only manifest line tying them together. On every
-later run it compares the new hash to the last one and flags the difference.
+Those are the same case, which is why they share a component rather than one
+being an exception to the other. A vendor edits its marketing page; a district
+court amends its local rules. Either way a quotation taken today has to remain
+quotable months later, and the only way to hold a publisher to its own words is
+to have kept a copy and recorded when it was taken.
 
-It does not judge claims. Whether a claim is accurate is attorney work.
+This component produces that evidence: a rendered HTML snapshot, a screenshot,
+a SHA-256 over the HTML, a third-party copy in the Wayback Machine, and an
+append-only manifest line tying them together. On every later run it compares
+the new hash to the last one and flags the difference.
+
+It does not judge what it archives. Whether a vendor's claim is accurate, and
+whether a rule means what an answer says it means, are both attorney work.
 
 ## What it does not need
 
