@@ -1,0 +1,32 @@
+{
+  "source": "Magesh et al. 2024",
+  "citation": "Varun Magesh, Faiz Surani, Matthew Dahl, Mirac Suzgun, Christopher D. Manning, Daniel E. Ho, \"Hallucination-Free? Assessing the Reliability of Leading AI Legal Research Tools\", arXiv:2405.20362; Journal of Empirical Legal Studies (2025). Preregistered at osf.io/etzp2 on 22 March 2024.",
+  "coverage": "PARTIAL. Covers the 15 example queries printed verbatim in Appendix A, one per category, and the cases named in them. It does NOT cover the other 187 items. The full set is not publicly obtainable: the OSF registration returns 'Authentication credentials were not provided' to the API, and the publisher returns 403 to automated requests. Any artifact relying on this list must state the coverage rather than imply a complete check.",
+  "items_covered": 15,
+  "items_total": 202,
+  "retrieved_at_utc": "2026-09-13",
+  "retrieved_from": "arXiv:2405.20362 Appendix A, extracted from the PDF",
+
+  "case_names": [
+    "Sears, Roebuck & Co. v. Blade",
+    "Riley v. Albany Savings Bank",
+    "In Re Bebar",
+    "Nassau Smelting & Refining Works, Ltd. v. United States",
+    "United States v. Pfirsch"
+  ],
+
+  "citations": [
+    "103 N.Y. 669",
+    "315 F. Supp. 841",
+    "266 U.S. 101",
+    "256 U.S. 547"
+  ],
+
+  "cluster_ids": [],
+
+  "notes": {
+    "cluster_ids": "Empty by design. The paper names cases, not CourtListener cluster ids. Resolving these names to clusters would add ids here and make the check exact for the cases it covers; it would not widen coverage beyond 15 of 202.",
+    "A.3.1": "The Colorado pro se attorney's fees example names no case, so only the proposition is known and nothing can be excluded by identity.",
+    "overlapping_categories": "Their A.4.1 (Metadata: Citation, 10), A.4.2 (Metadata: Year, 10), A.4.3 (Metadata: Author, 10) and A.3.1 (False Holding Statements, 10) are the four categories this component reimplements. Those 40 items are where collision would occur, and 4 of the 40 are covered here."
+  }
+}

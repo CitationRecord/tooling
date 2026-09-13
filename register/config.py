@@ -84,6 +84,34 @@ def check_unpublished(path, private_root=None, forbidden_roots=None) -> Path:
     return resolved
 
 
+def check_no_repository(path, forbidden_roots=None) -> Path:
+    """Resolve a path, refusing every git repository including the private one.
+
+    Stricter than check_unpublished, and for a different moment. A draft that
+    is still being drawn is not yet anything anyone should be able to commit,
+    even to the repository it will eventually live in. Moving a finished set
+    into the private repository stays a deliberate act.
+    """
+    resolved = Path(path).expanduser().resolve()
+    roots = FORBIDDEN_ROOTS if forbidden_roots is None else forbidden_roots
+
+    for root in roots:
+        root = Path(root).expanduser().resolve()
+        if resolved == root or root in resolved.parents:
+            raise UnsafeLocation(
+                f"refusing to write {resolved}: it is inside {root}."
+            )
+
+    enclosing = _git_root(resolved)
+    if enclosing is not None:
+        raise UnsafeLocation(
+            f"refusing to write {resolved}: it is inside the git repository at "
+            f"{enclosing}. A draft in progress belongs outside every "
+            "repository, including the private one it will end up in."
+        )
+    return resolved
+
+
 @dataclass(frozen=True)
 class Config:
     journal: Path = None
