@@ -62,9 +62,25 @@ def test_an_authority_with_no_quoted_passage_is_refused():
 def test_an_unsourced_question_is_recorded_rather_than_dropped():
     entry = unsourced("Some question?", "local-rules",
                       looked_for="the district's published rules",
-                      why_not="no rule on the point")
+                      why_not="no rule on the point",
+                      reason_kind="no authority found")
     assert entry["why_not"]
     assert entry["recorded_at_utc"]
+
+
+def test_the_unsourced_reason_distinguishes_the_law_from_us():
+    """A retrieval failure must not masquerade as a finding about the law."""
+    ours = unsourced("Q?", "local-rules", looked_for="the court's PDF",
+                     why_not="the court serves rules as script-rendered HTML "
+                             "and no primary copy could be extracted",
+                     reason_kind="authority not obtainable")
+    theirs = unsourced("Q?", "local-rules", looked_for="the district's rules",
+                       why_not="the district has no rule on the point",
+                       reason_kind="no authority found")
+    assert ours["reason_kind"] != theirs["reason_kind"]
+    with pytest.raises(ValueError):
+        unsourced("Q?", "local-rules", looked_for="x", why_not="y",
+                  reason_kind="could not be bothered")
 
 
 # --------------------------------------------------------------------------

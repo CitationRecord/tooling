@@ -105,14 +105,29 @@ def item(item_id: str, tier: str, category: str, question: str,
     }
 
 
+#: Why a question could not be grounded. The distinction is not pedantry: one
+#: of these says something about the law and the other says something about us,
+#: and a list that blurs them would let a retrieval failure masquerade as a
+#: finding about the categories.
+UNSOURCED_REASONS = (
+    "no authority found",          # nothing states the rule
+    "authority not obtainable",    # it exists; no verifiable copy could be got
+    "authority ambiguous",         # sources disagree and none is primary
+    "excluded",                    # a prior benchmark already uses it
+)
+
+
 def unsourced(question: str, category: str, looked_for: str,
-              why_not: str) -> dict:
+              why_not: str, reason_kind: str) -> dict:
     """A question that could not be grounded, recorded rather than dropped."""
+    if reason_kind not in UNSOURCED_REASONS:
+        raise ValueError(f"reason_kind must be one of {UNSOURCED_REASONS}")
     return {
         "question": question,
         "category": category,
         "looked_for": looked_for,
         "why_not": why_not,
+        "reason_kind": reason_kind,
         "recorded_at_utc": iso_utc(),
     }
 
