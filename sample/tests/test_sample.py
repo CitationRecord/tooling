@@ -24,7 +24,11 @@ from sample.negate import (
     reject_reason,
     strip_prefix,
 )
-from sample.queryset import ACCEPTABLE_RESPONSES, metadata_query
+from sample.queryset import (
+    ACCEPTABLE_RESPONSES,
+    CATEGORY_SELECTION,
+    metadata_query,
+)
 
 
 # --------------------------------------------------------------------------
@@ -296,6 +300,24 @@ def test_normalisation_folds_the_v_forms():
 
 # --------------------------------------------------------------------------
 # the artifact
+
+
+def test_a_shared_citation_is_rejected_at_draw_time():
+    """Six cases matched one drawn citation and three matched another. The
+    bulk table gives no sign of it, so the pool counts and the draw records."""
+    check = _metadata_check([])
+    shared = {"cluster_id": "1", "year": "2011", "reporter": "A.3d",
+              "volume": "32", "page": "836", "case_name": "Grese v. Grese",
+              "citation_shared": True}
+    assert check(shared) == "citation matches more than one case"
+    assert check(dict(shared, citation_shared=False)) is None
+
+
+def test_the_two_categories_declare_their_opposite_principles():
+    assert CATEGORY_SELECTION["metadata"]["prefers"] == "obscurity"
+    assert "prominence" in CATEGORY_SELECTION["negated-parenthetical"]["prefers"]
+    assert "select against each other" in CATEGORY_SELECTION["asymmetry"]
+    assert "not a defect" in CATEGORY_SELECTION["asymmetry"]
 
 
 def test_the_three_branch_response_is_recorded_with_its_source():

@@ -40,6 +40,48 @@ ACCEPTABLE_RESPONSES = {
 }
 
 
+#: The two categories select on opposite principles. Stated because nothing
+#: else in the artifact says so, and a reader comparing their results would
+#: otherwise have to infer it from the items.
+CATEGORY_SELECTION = {
+    "metadata": {
+        "prefers": "obscurity",
+        "how": (
+            "citation_count at most 2, Published status, a preferred reporter, "
+            "never a Supreme Court reporter, filed 2020 or earlier."
+        ),
+        "why": (
+            "A question about a famous case tests recall. A question about an "
+            "unremarkable district court opinion tests retrieval, which is "
+            "what this benchmark is about."
+        ),
+    },
+    "negated-parenthetical": {
+        "prefers": "prominence, as a consequence rather than a choice",
+        "how": (
+            "No obscurity filter is applied. Candidates come from judge-written "
+            "parentheticals, and a parenthetical exists because some later "
+            "opinion described the case, so the pool leans toward opinions that "
+            "are well described and therefore well cited."
+        ),
+        "why": (
+            "Left uncorrected deliberately. For a false-premise query, "
+            "inverting a well-known holding is a virtue: the falsehood is "
+            "unmistakable, and a system asserting support for it has clearly "
+            "failed rather than arguably erred."
+        ),
+    },
+    "asymmetry": (
+        "The two categories therefore select against each other. Metadata "
+        "selects away from well-cited cases; negated-parenthetical drifts "
+        "toward them. In the first resolved draw, three of five negated items "
+        "were Supreme Court cases while no metadata item could be. That is the "
+        "design showing, not a defect, and results from the two categories "
+        "should not be compared as though they sampled the same population."
+    ),
+}
+
+
 def iso_utc() -> str:
     return (datetime.now(timezone.utc)
             .isoformat(timespec="microseconds").replace("+00:00", "Z"))
@@ -78,6 +120,7 @@ def build(edition: str, generation: str, seed: str, sections: list,
         },
         "exclusions": exclusions,
         "reviewer_rejections": list(reviewer_rejections or []),
+        "category_selection": CATEGORY_SELECTION,
         "negation_rules": RULE_PROVENANCE,
         "acceptable_responses": {"negated-parenthetical": ACCEPTABLE_RESPONSES},
         "sources": sources,

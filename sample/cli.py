@@ -140,6 +140,13 @@ def _metadata_check(lists):
         if len(name) > MAX_CASE_NAME_LENGTH:
             return "case name longer than a case name"
 
+        # A citation naming several cases under-specifies the query built on
+        # it, whatever the case name says. Two drawn items failed this way at
+        # resolve, where six cases matched one citation and three matched
+        # another. Checked here so the rejection is on the record.
+        if candidate.get("citation_shared"):
+            return "citation matches more than one case"
+
         return exclude.reason_any(
             lists, name=name,
             citation=f"{candidate['volume']} {candidate['reporter']} "

@@ -108,6 +108,8 @@ def metadata_pool(citations_path, clusters_path, generation: str,
     }
 
     wanted: dict = {}
+    first_cluster_at: dict = {}
+    shared: set = set()
     scanned = 0
     for row in read_dicts(citations_path, ("cluster_id", "reporter", "volume",
                                            "page")):
@@ -118,9 +120,29 @@ def metadata_pool(citations_path, clusters_path, generation: str,
         if reporter in EXCLUDED_REPORTERS or reporter not in PREFERRED_REPORTERS:
             continue
         cluster = row["cluster_id"]
-        if not cluster or cluster in wanted:
+        if not cluster:
             continue
         if not (row["volume"] or "").strip().isdigit():
+            continue
+
+        # Whether this citation names one case or several. The bulk table
+        # carries a row per cluster and never says how many clusters sit at a
+        # page, so a citation matching six cases looks identical here to one
+        # matching a single case. Two drawn queries were built on ambiguous
+        # citations before anything counted this.
+        #
+        # Tracked as first-seen plus a set of keys known to be shared, rather
+        # than a set of clusters per key: the answer needed is only whether
+        # more than one cluster is present, and holding a set for every one of
+        # two million citations would cost hundreds of megabytes to learn it.
+        key = (reporter, row["volume"], row["page"])
+        seen = first_cluster_at.get(key)
+        if seen is None:
+            first_cluster_at[key] = cluster
+        elif seen != cluster:
+            shared.add(key)
+
+        if cluster in wanted:
             continue
         wanted[cluster] = {
             "cluster_id": cluster,
@@ -151,9 +173,19 @@ def metadata_pool(citations_path, clusters_path, generation: str,
         filed = (row["date_filed"] or "").strip()
         if not name or len(filed) < 4 or not filed[:4].isdigit():
             continue
+        key = (entry["reporter"], entry["volume"], entry["page"])
         candidates.append({**entry, "case_name": name, "date_filed": filed,
                            "year": filed[:4],
-                           "citation_count": int(row["citation_count"] or 0)})
+                           "citation_count": int(row["citation_count"] or 0),
+                           "citation_shared": key in shared})
+
+    filters["citation_uniqueness"] = (
+        "Each candidate records whether its reporter, volume and page name "
+        "more than one cluster. The draw rejects the shared ones, so the "
+        "rejection is recorded rather than absorbed here."
+    )
+    ambiguous = sum(1 for c in candidates if c["citation_shared"])
+    filters["candidates_with_shared_citations"] = ambiguous
 
     return Pool(category="metadata", generation=generation, filters=filters,
                 candidates=candidates, scanned=scanned + cluster_rows,
