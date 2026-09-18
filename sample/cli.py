@@ -25,13 +25,16 @@ from bulk.config import default_directory
 
 from . import CATEGORIES, METADATA_KINDS, __version__
 from . import draw as draw_mod
-from . import exclude, pool as pool_mod, queryset, reviewed, truth
+from . import bluebook, exclude, pilot as pilot_mod, pool as pool_mod
+from . import queryset, reviewed, truth
 from .config import (
     DEFAULT_WORKDIR,
     DOCKET_NAME_PATTERNS,
     MALFORMED_NAME_PATTERNS,
     MAX_CASE_NAME_LENGTH,
     MAX_FILED_YEAR,
+    SINGLE_JUDGE_REPORTERS,
+    UNATTRIBUTED_NAME_PATTERNS,
     UnsafeLocation,
     workdir,
 )
@@ -117,6 +120,31 @@ def cmd_pool(args) -> int:
 
 _DOCKET_NAME = [re.compile(p) for p in DOCKET_NAME_PATTERNS]
 _MALFORMED_NAME = [re.compile(p) for p in MALFORMED_NAME_PATTERNS]
+_UNATTRIBUTED_NAME = [re.compile(p) for p in UNATTRIBUTED_NAME_PATTERNS]
+
+
+def authorship_is_undefined(candidate) -> str | None:
+    """Why "who wrote the majority opinion" has no answer for this case.
+
+    Applied only to the authorship question, because it is only that question
+    the defect touches. The year and the citation of a single-judge decision
+    are perfectly good questions with perfectly good answers.
+
+    This is a draw-time rule on pool fields, so it is mechanical and its cost
+    is countable. It is not complete: the regional reporters carry some
+    trial-court decisions too, and no field in the pool distinguishes them.
+    `truth.majority_author` therefore refuses again at resolve time, where the
+    court and the per curiam flag are known. Two partial checks in series,
+    each saying what it covers, beat one that claims to be whole.
+    """
+    if candidate.get("reporter") in SINGLE_JUDGE_REPORTERS:
+        return ("single-judge court, so there is no majority opinion to "
+                "attribute")
+    name = candidate.get("case_name") or ""
+    for pattern in _UNATTRIBUTED_NAME:
+        if pattern.search(name):
+            return "authorship not attributable from the case name"
+    return None
 
 
 def _metadata_check(lists):
@@ -188,23 +216,45 @@ def cmd_draw(args) -> int:
     decisions = reviewed.load(reviewed_path)
     sections = []
 
+    # Items an earlier draw already took. Rejected by rule rather than left to
+    # a different seed to miss: a collision would burn an item an edition is
+    # holding, and "a different seed almost certainly lands elsewhere" is not
+    # a control.
+    prior = pilot_mod.drawn_identifiers(args.exclude_drawn)
+
     meta = pools["metadata"]
     taken_clusters = set()
 
     reviewed_metadata = reviewed.check(decisions, "metadata")
+    prior_metadata = pilot_mod.check(prior, "metadata")
 
-    def metadata_unique(candidate):
-        if candidate["cluster_id"] in taken_clusters:
-            return "cluster already used in this edition"
-        judged = reviewed_metadata(candidate["cluster_id"])
-        if judged:
-            return judged
-        return _metadata_check(lists)(candidate)
+    def metadata_check_for(kind):
+        """The checks for one metadata question type.
+
+        Kind-aware because one of them is: "who wrote the majority opinion"
+        has no answer for a single-judge or per curiam decision, while the
+        year and the citation of the same decision are fine.
+        """
+        def check(candidate):
+            if candidate["cluster_id"] in taken_clusters:
+                return "cluster already used in this edition"
+            already = prior_metadata(candidate["cluster_id"])
+            if already:
+                return already
+            judged = reviewed_metadata(candidate["cluster_id"])
+            if judged:
+                return judged
+            if kind == "author":
+                undefined = authorship_is_undefined(candidate)
+                if undefined:
+                    return undefined
+            return _metadata_check(lists)(candidate)
+        return check
 
     for kind, count in METADATA_PLAN:
         result = draw_mod.select(
             meta["candidates"], seed, f"metadata:{kind}", count,
-            identify=lambda c: c["cluster_id"], check=metadata_unique)
+            identify=lambda c: c["cluster_id"], check=metadata_check_for(kind))
         for candidate in result.taken:
             taken_clusters.add(candidate["cluster_id"])
         section = result.as_dict()
@@ -216,8 +266,12 @@ def cmd_draw(args) -> int:
 
     para = pools["negated-parenthetical"]
     reviewed_para = reviewed.check(decisions, "negated-parenthetical")
+    prior_para = pilot_mod.check(prior, "negated-parenthetical")
 
     def parenthetical_check(candidate):
+        already = prior_para(candidate["parenthetical_id"])
+        if already:
+            return already
         judged = reviewed_para(candidate["parenthetical_id"])
         if judged:
             return judged
@@ -249,11 +303,16 @@ def cmd_draw(args) -> int:
             "generation": args.generation} for c in CATEGORIES],
     )
 
+    if args.pilot:
+        document = pilot_mod.decorate(document, prior, args.edition)
+
     destination = Path(args.out) if args.out else (
         work / f"queryset-{args.edition}-draft.json")
     queryset.write(document, destination)
 
     _out(f"drew {len(document['queries'])} queries for {args.edition}")
+    if args.pilot:
+        _out("  PILOT. registrable: false, pilot: true.")
     for section in sections:
         label = section.get("metadata_kind") or section["category"]
         _out(f"  {label:<22} took {section['taken']} of {section['wanted']}, "
@@ -297,26 +356,46 @@ def cmd_show(args) -> int:
 
 
 def cmd_reject(args) -> int:
-    """Record a reviewer's rejection so the draw can consult it as data."""
+    """Record a rejection so the draw can consult it as data.
+
+    Either a reviewer's judgment, named with `--by`, or a mechanical condition
+    found after the draw, named with `--rule`. The two are recorded
+    differently on purpose: a data gap filed under a person's name
+    misattributes the one thing this record exists to keep straight.
+    """
     try:
         work = workdir(args.workdir)
     except UnsafeLocation as refusal:
         _note(str(refusal))
         return 3
+    if bool(args.by) == bool(args.rule):
+        _note("give exactly one of --by (a reviewer's judgment) or --rule "
+              "(a mechanical condition).")
+        _note(f"known conditions: {', '.join(sorted(reviewed.CONDITIONS))}")
+        return 2
+
     path = reviewed.path_for(work, args.edition)
     try:
-        entry = reviewed.add(path, args.candidate, args.category,
-                             args.reason, args.by)
+        entry = reviewed.add(
+            path, args.candidate, args.category, args.reason,
+            decided_by=args.by,
+            source="rule" if args.rule else "reviewer",
+            condition=args.rule)
     except ValueError as clash:
         _note(str(clash))
         return 1
     _out(f"recorded  {entry['candidate_id']}  {entry['category']}")
     _out(f"  reason  {entry['reason']}")
-    _out(f"  by      {entry['decided_by']} at {entry['decided_at_utc']}")
+    _out(f"  source  {reviewed.attribution(entry)}")
+    if entry.get("condition"):
+        _out(f"  found   at {entry['discovered_at']}, not at draw")
+        _out(f"  why     {entry['condition_detail']['why_not_at_draw']}")
+    _out(f"  at      {entry['decided_at_utc']}")
     _out(f"  file    {path}")
     _out("")
     _out("  Redraw on the same seed. The candidate will appear in the")
-    _out("  rejection record marked as a reviewer decision, not a rule.")
+    _out(f"  rejection record attributed to {reviewed.attribution(entry)},")
+    _out("  which an artifact keeps distinct from a plain draw-time rule.")
     return 0
 
 
@@ -367,14 +446,50 @@ def _resolve_metadata(query, resolver, client) -> bool:
         query["text"] = query["text_template"].format(
             case_name=subject["case_name"], court=resolution.court,
             year=resolution.year)
-        query["ground_truth"] = {"answer": subject["citation"], **base}
+
+        # The question asks for a Bluebook citation, so the answer has to be
+        # one. The court's Bluebook abbreviation is fetched rather than
+        # derived: Table T1 is long, and a mapping maintained here would be a
+        # second source of truth that drifts from the first.
+        abbreviation = None
+        if resolution.court_id:
+            try:
+                abbreviation = (client.court(resolution.court_id)
+                                .get("citation_string"))
+            except Exception:  # noqa: BLE001 - reported, never guessed around
+                abbreviation = None
+        provenance["court_abbreviation_lookup"] = {
+            "endpoint": f"courts/{resolution.court_id}",
+            "field": "citation_string",
+            "journalled": False,
+            "found": bool(abbreviation),
+        }
+        try:
+            query["ground_truth"] = {
+                **bluebook.answer(
+                    case_name=resolution.case_name or subject["case_name"],
+                    reporter_citation=subject["citation"],
+                    court_abbreviation=abbreviation,
+                    year=resolution.year),
+                **base,
+            }
+        except bluebook.Incomplete as refusal:
+            query["provenance"] = {**provenance, "note": str(refusal)}
+            return False
     else:
-        found = truth.majority_author(client, resolution.cluster_id)
+        found = truth.majority_author(client, resolution.cluster_id,
+                                      court=resolution.court)
         provenance["author_lookup"] = {
             "endpoint": f"opinions?cluster={resolution.cluster_id}",
             "journalled": False,
             "source": found["source"],
         }
+        if found.get("undefined"):
+            # Not a lookup failure. The question has no correct answer for
+            # this case, so the item is left incomplete and says why.
+            provenance["authorship_refused"] = found["undefined"]
+            query["provenance"] = provenance
+            return False
         if not found["author"]:
             query["provenance"] = provenance
             return False
@@ -523,6 +638,15 @@ def build_parser() -> argparse.ArgumentParser:
     drawer.add_argument("--seed", metavar="HEX",
                         help="re-draw an earlier selection; omit for a new one")
     drawer.add_argument("--out", metavar="FILE")
+    drawer.add_argument("--pilot", action="store_true",
+                        help="mark the artifact pilot: true and "
+                             "registrable: false; register/ will refuse it "
+                             "and runner/ will only run it with --pilot")
+    drawer.add_argument("--exclude-drawn", nargs="*", default=[],
+                        metavar="FILE",
+                        help="query-set artifacts whose drawn candidates this "
+                             "draw must not take; rejected by rule and "
+                             "recorded as one")
     common(drawer)
     drawer.set_defaults(func=cmd_draw)
 
@@ -536,8 +660,12 @@ def build_parser() -> argparse.ArgumentParser:
     rejecter.add_argument("--candidate", required=True, metavar="ID")
     rejecter.add_argument("--category", required=True, choices=CATEGORIES)
     rejecter.add_argument("--reason", required=True, metavar="TEXT")
-    rejecter.add_argument("--by", required=True, metavar="NAME",
-                          help="who made the call")
+    rejecter.add_argument("--by", metavar="NAME",
+                          help="who made the call, for a reviewer's judgment")
+    rejecter.add_argument("--rule", metavar="CONDITION",
+                          choices=sorted(reviewed.CONDITIONS),
+                          help="a mechanical condition found after the draw, "
+                               "recorded without a person's name")
     rejecter.add_argument("--workdir", metavar="PATH")
     rejecter.set_defaults(func=cmd_reject)
 
@@ -557,3 +685,12 @@ def main(argv=None) -> int:
         parser.print_help()
         return 2
     return args.func(args)
+def metadata_kinds_affected():
+    """Which metadata questions the authorship guard touches.
+
+    Named as a function so a test can assert the scope rather than trusting a
+    comment. A single-judge decision has a perfectly good filing year and a
+    perfectly good citation; only the authorship question has no answer.
+    """
+    return ("author",)
+

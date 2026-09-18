@@ -25,6 +25,49 @@ from dataclasses import dataclass, field
 #: the majority.
 MAJORITY_TYPES = ("010combined", "020lead", "015unamimous", "025plurality")
 
+#: Courts that sit as one judge, matched on the resolved court name.
+#:
+#: The second half of the authorship guard. `sample/config.py` rejects the
+#: reporters that are single-judge by construction, at draw time, from pool
+#: fields. That check cannot see the court, and the regional reporters carry
+#: some trial-court decisions, so this catches what the reporter did not say.
+#:
+#: Refusing here leaves the item incomplete rather than answered, which is the
+#: behaviour this module already has for every answer it cannot establish. An
+#: incomplete item is visible in the artifact and blocks registration; a wrong
+#: one is invisible and gets published.
+SINGLE_JUDGE_COURTS = (
+    "district court",
+    "bankruptcy",
+    "court of claims",           # the pre-1982 single-judge trial court
+    "tax court",
+    "superior court",            # state trial courts in most states
+    "circuit court",             # state trial courts, e.g. Illinois
+    "court of common pleas",
+    "surrogate",
+    "family court",
+    "municipal court",
+    "justice court",
+    "probate",
+)
+
+
+def authorship_is_undefined(court: str, opinion: dict) -> str | None:
+    """Why the majority author cannot be recorded for this opinion.
+
+    Checked against what the API actually returned, rather than inferred from
+    the reporter, so it catches the trial-court decisions that reach a
+    regional reporter.
+    """
+    name = (court or "").lower()
+    for marker in SINGLE_JUDGE_COURTS:
+        if marker in name:
+            return (f"{court} sits as a single judge, so there is no majority "
+                    f"opinion to attribute")
+    if opinion.get("per_curiam"):
+        return "the opinion is per curiam, so it is by the court, not a judge"
+    return None
+
 
 @dataclass
 class Plan:
@@ -96,7 +139,7 @@ def plan_for(document: dict) -> Plan:
     return plan
 
 
-def majority_author(client, cluster_id) -> dict:
+def majority_author(client, cluster_id, court=None) -> dict:
     """The author of the opinion carrying the judgment, or a stated absence.
 
     Returns what was found and how, never a guess. An opinion with no recorded
@@ -106,7 +149,7 @@ def majority_author(client, cluster_id) -> dict:
     response = client._request(
         "GET", "opinions",
         params={"cluster": str(cluster_id),
-                "fields": "id,type,author_str,author,page_count"})
+                "fields": "id,type,author_str,author,per_curiam,page_count"})
     results = response.json().get("results") or []
 
     ranked = sorted(
@@ -116,6 +159,12 @@ def majority_author(client, cluster_id) -> dict:
     for opinion in ranked:
         if opinion.get("type") not in MAJORITY_TYPES:
             continue
+        undefined = authorship_is_undefined(court, opinion)
+        if undefined:
+            return {"author": None, "opinion_id": opinion.get("id"),
+                    "opinion_type": opinion.get("type"),
+                    "undefined": undefined,
+                    "source": "refused: authorship is not well defined"}
         name = (opinion.get("author_str") or "").strip()
         if name:
             return {"author": name, "opinion_id": opinion.get("id"),

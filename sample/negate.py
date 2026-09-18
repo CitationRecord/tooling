@@ -208,6 +208,30 @@ EMBEDDING = re.compile(
     re.IGNORECASE,
 )
 
+#: A coordinating conjunction after a comma, which joins a second independent
+#: clause to the first.
+#:
+#: This is the sixth failure shape, and like the other five it was found by
+#: reading a draw rather than anticipated. The pilot drew "holding that the
+#: discovery rule does not apply to civil penalty enforcement actions, and the
+#: statute of limitations starts running when the fraud occurs". Deleting the
+#: "not" inverted the first clause and left the second untouched, producing a
+#: query that contradicted itself: if the discovery rule *does* apply, the
+#: clock does not start when the fraud occurs. Three of four systems reported
+#: the contradiction rather than answering.
+#:
+#: The clause guard that should have caught it counted full stops and
+#: semicolons, which are sentence boundaries. A comma and a coordinator are a
+#: clause boundary, and a single negator cannot govern both sides of one.
+#:
+#: Deliberately over-inclusive: it also rejects a serial list, where the single
+#: negator does govern the whole text and the inversion would have been clean.
+#: That is the trade this module always makes, for the reason it always gives
+#: -- the pool is large enough that discarding is free, and a doubtful negation
+#: is not.
+COORDINATED_CLAUSE = re.compile(
+    r",\s+(?:and|but|or|nor|yet|so)\b", re.IGNORECASE)
+
 #: A line-break hyphen flattened into the text, as "testi- mony". The corpus
 #: carries these from the printed page. Rejected rather than repaired, for the
 #: same reason as a stray footnote marker: the original parenthetical is the
@@ -320,8 +344,13 @@ def reject_reason(text: str) -> str | None:
         return "not a holding-that parenthetical"
     if not (MIN_LENGTH <= len(text) <= MAX_LENGTH):
         return "outside the length band"
+    # Sentence boundaries. These catch a second *sentence*, never a second
+    # clause inside one sentence, which is what let the Gabelli item through.
     if text.count(".") > 1 or ";" in text:
-        return "more than one clause"
+        return "more than one sentence"
+    if COORDINATED_CLAUSE.search(text):
+        return "comma and a coordinator join a second clause; one negator " \
+               "cannot govern both"
 
     hits = sum(len(pattern.findall(text)) for pattern in RULES.values())
     if hits == 0:

@@ -140,10 +140,16 @@ def test_surviving_negation_is_rejected():
     assert reject_reason(text) == "negation survives the removal"
 
 
-def test_a_second_clause_is_rejected():
+def test_a_second_sentence_is_rejected():
+    """A semicolon is a sentence boundary. This is the guard that always worked.
+
+    Renamed from "second clause" because that is what it was never checking:
+    a comma and a coordinator open a second clause inside one sentence, and
+    that shape passed this rule until the pilot found it.
+    """
     text = ("holding that the rule does not apply here; the parties agreed "
             "otherwise in writing before the dispute arose")
-    assert reject_reason(text) == "more than one clause"
+    assert reject_reason(text) == "more than one sentence"
 
 
 def test_length_bounds_are_enforced():
@@ -444,3 +450,392 @@ def test_drawing_without_a_pool_says_which_one_is_missing(tmp_path, capsys):
     code = main(["draw", "--edition", "2026.Q4",
                  "--workdir", str(tmp_path / "work")])
     assert code == 2
+
+
+# --------------------------------------------------------------------------
+# pilot draws, and keeping them apart from an edition's draw
+
+
+def test_a_pilot_artifact_refuses_registration():
+    """register/ reads registrable: false and exits 4. runner/ reads pilot."""
+    from sample import pilot
+
+    document = pilot.decorate({"seed": "abc"}, {"by_category": {}, "sources": []},
+                              "pilot-2026.09")
+    assert document["registrable"] is False
+    assert document["pilot"] is True
+    assert document["registrable_reason"]
+    assert "burned" in document["items_are_burned"]
+
+
+def test_prior_identifiers_are_read_without_the_seed(tmp_path):
+    """Only the identifiers. Not the seed, the queries or the ground truth."""
+    from sample import pilot
+
+    edition = tmp_path / "edition.json"
+    edition.write_text(json.dumps({
+        "edition": "2026.Q4",
+        "seed": "the-real-secret-seed",
+        "queries": [
+            {"category": "metadata", "subject": {"cluster_id": "111"},
+             "text": "secret query", "ground_truth": {"answer": "secret"}},
+            {"category": "negated-parenthetical",
+             "subject": {"parenthetical_id": "222"}},
+        ],
+    }), encoding="utf-8")
+
+    taken = pilot.drawn_identifiers([edition])
+    assert taken["by_category"]["metadata"] == ["111"]
+    assert taken["by_category"]["negated-parenthetical"] == ["222"]
+
+    blob = json.dumps(taken)
+    assert "the-real-secret-seed" not in blob
+    assert "secret query" not in blob
+
+
+def test_the_seed_fingerprint_proves_two_draws_differ(tmp_path):
+    """A reader with both artifacts can check it; neither discloses the other."""
+    from sample import pilot
+
+    edition = tmp_path / "edition.json"
+    edition.write_text(json.dumps({"edition": "2026.Q4", "seed": "aaa",
+                                   "queries": []}), encoding="utf-8")
+    taken = pilot.drawn_identifiers([edition])
+    document = pilot.decorate({"seed": "bbb"}, taken, "pilot")
+
+    assert document["seed_sha256"] == pilot.seed_fingerprint("bbb")
+    recorded = document["distinct_from"]["sources"][0]["seed_sha256"]
+    assert recorded == pilot.seed_fingerprint("aaa")
+    assert recorded != document["seed_sha256"]
+    assert "aaa" not in json.dumps(document)
+
+
+def test_an_excluded_candidate_is_rejected_by_rule():
+    from sample import pilot
+
+    taken = {"by_category": {"metadata": {"111"}}, "sources": []}
+    check = pilot.check(taken, "metadata")
+    assert check("111") == pilot.EXCLUSION_RULE
+    assert check("999") is None
+
+
+def test_the_exclusion_is_a_rule_not_a_reviewer_decision():
+    """It must not read as somebody's judgment in the artifact."""
+    from sample import pilot
+
+    taken = {"by_category": {"metadata": {"111"}}, "sources": []}
+    reason = pilot.check(taken, "metadata")("111")
+    assert isinstance(reason, str), "a tuple would record this as a reviewer"
+
+
+# --------------------------------------------------------------------------
+# the sixth failure shape: a comma and a coordinator
+
+
+#: The exact parenthetical the 2026.09 pilot drew as neg-10314042, from the
+#: CourtListener corpus. Pinned verbatim rather than paraphrased: a later
+#: loosening of the clause guard must fail against the real text that broke it,
+#: not against a tidied version of it.
+GABELLI = (
+    "holding that the “discovery rule” does not apply to civil "
+    "penalty enforcement actions, and the statute of limitations starts "
+    "running when the fraud occurs."
+)
+
+
+def test_the_gabelli_parenthetical_is_rejected():
+    """The item that reached four models and could not have a right answer.
+
+    Deleting "not" inverted the first clause and left the second, producing a
+    query that contradicted itself: if the discovery rule *does* apply, the
+    clock does not start when the fraud occurs. Three of four systems reported
+    the contradiction instead of answering.
+
+    This is a pinned regression. If it ever returns None again, the guard has
+    been loosened back to the state that produced an unanswerable item.
+    """
+    from sample.negate import negate, reject_reason
+
+    reason = reject_reason(GABELLI)
+    assert reason is not None, "the Gabelli parenthetical must never be drawn"
+    assert "coordinator" in reason
+    assert negate(GABELLI) is None
+
+
+def test_the_old_guard_would_have_passed_it():
+    """Why the fix was needed, asserted rather than described.
+
+    The previous guard counted full stops and semicolons. The Gabelli text has
+    exactly one full stop and no semicolon, so it passed. Keeping this as a
+    test means the distinction between a sentence boundary and a clause
+    boundary stays visible to whoever reads these next.
+    """
+    assert GABELLI.count(".") == 1
+    assert ";" not in GABELLI
+
+
+def test_a_coordinated_second_clause_is_rejected_generally():
+    from sample.negate import reject_reason
+
+    text = ("holding that the statute does not apply to municipal employers, "
+            "and the claim accrues on the date of discharge")
+    assert "coordinator" in (reject_reason(text) or "")
+
+
+def test_a_single_clause_negation_still_passes():
+    """The fix must not close the category it is protecting."""
+    from sample.negate import negate
+
+    text = ("holding that a change in the statute of limitations was not "
+            "foreseeable by the parties to the agreement")
+    result = negate(text)
+    assert result is not None
+    assert result.negated.startswith("a change in the statute of limitations was")
+    assert "not" not in result.negated.split()
+
+
+# --------------------------------------------------------------------------
+# authorship: a question with no correct answer is not a question
+
+
+def test_the_pilot_item_would_no_longer_be_drawn():
+    """410 B.R. 170 -- the item that asked four models an unanswerable question.
+
+    Three of the four correctly said a single-judge court produces no majority
+    opinion. Our ground truth recorded an author, so a scorer applying it would
+    have marked the three that were right wrong. Pinned so a later loosening
+    fails here rather than readmitting the item.
+    """
+    from sample.cli import authorship_is_undefined
+
+    reason = authorship_is_undefined({
+        "cluster_id": "1542423", "reporter": "B.R.", "volume": "410",
+        "page": "170",
+        "case_name": "Reunion Industries, Inc. v. Steel Partners II, L.P.",
+    })
+    assert reason is not None
+    assert "no majority opinion" in reason
+
+
+def test_every_single_judge_reporter_is_rejected_for_authorship():
+    from sample.cli import authorship_is_undefined
+    from sample.config import SINGLE_JUDGE_REPORTERS
+
+    for reporter in SINGLE_JUDGE_REPORTERS:
+        assert authorship_is_undefined(
+            {"reporter": reporter, "case_name": "Smith v. Jones"}), reporter
+
+
+def test_an_appellate_reporter_is_still_eligible():
+    """The rule must not close the category it is protecting."""
+    from sample.cli import authorship_is_undefined
+
+    assert authorship_is_undefined(
+        {"reporter": "N.E.2d", "case_name": "People v. Brooks"}) is None
+
+
+def test_per_curiam_and_orders_are_rejected_by_name():
+    from sample.cli import authorship_is_undefined
+
+    for name in ("State v. Smith (Per Curiam)",
+                 "In re the Marriage of Haddad",
+                 "Jones v. Board, on the court's own motion"):
+        assert authorship_is_undefined({"reporter": "A.2d", "case_name": name}), name
+
+
+def test_the_rule_applies_only_to_the_authorship_question():
+    """A single-judge decision has a perfectly good year and citation."""
+    from sample.cli import metadata_kinds_affected
+
+    assert metadata_kinds_affected() == ("author",)
+
+
+def test_resolve_refuses_a_single_judge_court():
+    """The second half of the guard, where the court is actually known."""
+    from sample.truth import authorship_is_undefined as refuse
+
+    assert refuse("District Court, W.D. Pennsylvania", {})
+    assert refuse("United States Bankruptcy Court", {})
+    assert refuse("Supreme Court of Colorado", {}) is None
+
+
+def test_resolve_refuses_a_per_curiam_opinion():
+    from sample.truth import authorship_is_undefined as refuse
+
+    assert refuse("Supreme Court of Colorado", {"per_curiam": True})
+    assert refuse("Supreme Court of Colorado", {"per_curiam": False}) is None
+
+
+def test_a_refused_authorship_leaves_the_item_incomplete_not_wrong():
+    """An incomplete item blocks registration. A wrong one gets published."""
+    from sample.truth import majority_author
+
+    class FakeClient:
+        def _request(self, method, endpoint, params=None):
+            class R:
+                @staticmethod
+                def json():
+                    return {"results": [{"id": 1, "type": "010combined",
+                                         "author_str": "MCVERRY",
+                                         "per_curiam": False}]}
+            return R()
+
+    found = majority_author(FakeClient(), 1542423,
+                            court="District Court, W.D. Pennsylvania")
+    assert found["author"] is None
+    assert "single judge" in found["undefined"]
+
+
+# --------------------------------------------------------------------------
+# a data gap is not somebody's judgment
+
+
+def test_a_rule_sourced_rejection_names_a_condition_not_a_person(tmp_path):
+    from sample import reviewed
+
+    path = tmp_path / "reviewed-x.json"
+    entry = reviewed.add(path, "5669476", "metadata",
+                         "CourtListener records no author for this opinion",
+                         source="rule",
+                         condition="author-absent-in-courtlistener")
+    assert entry["source"] == "rule"
+    assert entry["decided_by"] is None
+    assert entry["condition"] == "author-absent-in-courtlistener"
+    assert entry["discovered_at"] == "resolve"
+    assert reviewed.attribution(entry) == "rule:author-absent-in-courtlistener"
+
+
+def test_a_rule_sourced_rejection_refuses_a_person(tmp_path):
+    """The confusion this field exists to prevent, prevented."""
+    from sample import reviewed
+
+    with pytest.raises(ValueError, match="not a person"):
+        reviewed.add(tmp_path / "r.json", "1", "metadata", "gap",
+                     decided_by="JB Wagoner", source="rule",
+                     condition="author-absent-in-courtlistener")
+
+
+def test_an_unknown_condition_is_refused(tmp_path):
+    from sample import reviewed
+
+    with pytest.raises(ValueError, match="unknown condition"):
+        reviewed.add(tmp_path / "r.json", "1", "metadata", "gap",
+                     source="rule", condition="autohr-absent")
+
+
+def test_a_reviewer_decision_must_still_name_someone(tmp_path):
+    from sample import reviewed
+
+    with pytest.raises(ValueError, match="must name who"):
+        reviewed.add(tmp_path / "r.json", "1", "metadata", "judgment call")
+
+
+def test_the_draw_records_the_two_sources_differently(tmp_path):
+    """Three attributions, and an artifact keeps them apart."""
+    from sample import reviewed
+
+    path = tmp_path / "r.json"
+    reviewed.add(path, "111", "metadata", "needs a doctrinal frame",
+                 decided_by="JB Wagoner")
+    reviewed.add(path, "222", "metadata", "no author recorded",
+                 source="rule", condition="author-absent-in-courtlistener")
+
+    check = reviewed.check(reviewed.load(path), "metadata")
+    assert check("111")[1] == "reviewer:JB Wagoner"
+    assert check("222")[1] == "rule:author-absent-in-courtlistener"
+    assert check("333") is None
+
+
+def test_an_entry_written_before_sources_reads_as_a_reviewer_decision():
+    """Backwards compatible: that is all there was when it was written."""
+    from sample import reviewed
+
+    legacy = {"candidate_id": "1", "category": "metadata", "reason": "x",
+              "decided_by": "JB Wagoner"}
+    assert reviewed.attribution(legacy) == "reviewer:JB Wagoner"
+
+
+def test_every_condition_explains_why_it_is_not_a_draw_time_rule():
+    """A condition that could be checked at draw time should be one."""
+    from sample import reviewed
+
+    for name, detail in reviewed.CONDITIONS.items():
+        assert detail["why_not_at_draw"], name
+        assert detail["discovered_at"] in ("resolve",), name
+
+
+# --------------------------------------------------------------------------
+# the citation question must be answered in the form it asks for
+
+
+def test_the_answer_is_a_bluebook_citation_not_a_reporter_cite():
+    """The defect: the question asked for one thing, the answer held another.
+
+    A system returning the correct Bluebook citation would not have matched a
+    ground truth holding only "513 B.R. 896".
+    """
+    from sample import bluebook
+
+    built = bluebook.answer(
+        case_name="Okke v. Okke (In re Okke)",
+        reporter_citation="513 B.R. 896",
+        court_abbreviation="Bankr. W.D. Mich.",
+        year=2014)
+    assert built["answer"] == \
+        "Okke v. Okke (In re Okke), 513 B.R. 896 (Bankr. W.D. Mich. 2014)"
+    assert built["answer"] != "513 B.R. 896"
+
+
+def test_the_court_is_the_bluebook_abbreviation_not_the_corpus_string():
+    from sample import bluebook
+
+    built = bluebook.answer("Adams v. State", "394 So. 2d 540",
+                            "Fla. Dist. Ct. App.", 1981)
+    assert "Fla. Dist. Ct. App." in built["answer"]
+    assert "District Court of Appeal of Florida" not in built["answer"]
+
+
+def test_a_missing_component_refuses_rather_than_building_a_gap():
+    """A citation assembled around a blank looks like an answer."""
+    from sample import bluebook
+
+    for kwargs in (
+        {"case_name": "", "reporter_citation": "1 A.2d 2",
+         "court_abbreviation": "Tex.", "year": 1990},
+        {"case_name": "A v. B", "reporter_citation": "1 A.2d 2",
+         "court_abbreviation": None, "year": 1990},
+        {"case_name": "A v. B", "reporter_citation": "1 A.2d 2",
+         "court_abbreviation": "Tex.", "year": None},
+    ):
+        with pytest.raises(bluebook.Incomplete):
+            bluebook.answer(**kwargs)
+
+
+def test_the_components_travel_beside_the_whole():
+    """So a scorer can say which part of a parallel citation differs."""
+    from sample import bluebook
+
+    built = bluebook.answer("People v. Lodge", "403 N.W.2d 591",
+                            "Mich. Ct. App.", 1987)
+    parts = built["answer_components"]
+    assert parts["reporter_citation"] == "403 N.W.2d 591"
+    assert parts["court_abbreviation"] == "Mich. Ct. App."
+    assert parts["year"] == 1987
+    assert built["matching_note"]
+
+
+def test_the_year_question_is_answered_in_the_form_it_asks_for():
+    """Checked alongside the citation one. This pair already agrees.
+
+    The question asks for a year and the recorded answer is a year, so there
+    is nothing to reconcile. Pinned so the agreement is asserted rather than
+    assumed the next time somebody edits the template.
+    """
+    from sample.queryset import metadata_query
+
+    query = metadata_query("year", {
+        "cluster_id": "1", "case_name": "Adams v. State", "volume": "394",
+        "reporter": "So. 2d", "page": "540", "year": "1981",
+        "citation_count": 0})
+    assert query["text"].startswith("What year was")
+    assert "decided?" in query["text"]

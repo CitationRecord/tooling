@@ -18,7 +18,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import KINDS, __version__
+from . import KINDS, PUBLISHABLE_KINDS, __version__
 from .config import DEFAULT_JOURNAL, PRIVATE_ROOT, UnsafeLocation, check_unpublished
 from .digest import digest_file
 from .journal import (
@@ -75,11 +75,25 @@ def refuses_registration(path):
 
 def cmd_add(args) -> int:
     journal = _journal(args)
-    try:
-        artifact = check_unpublished(args.artifact, private_root=args.private_root)
-    except UnsafeLocation as refusal:
-        _note(str(refusal))
-        return 3
+    # The destination guard protects artifacts whose value depends on being
+    # unseen. A prompt protocol and a methodology document are published
+    # *before* the results they produce, so for those kinds the guard would
+    # refuse the only correct location: a protocol nobody can read is not a
+    # published protocol.
+    #
+    # Exempted by kind, from a closed list, rather than by a flag on the
+    # command. A flag would let any artifact through on the day somebody was
+    # in a hurry; this way the decision sits in one line of source where it
+    # shows up in a diff. Every other kind still meets the full guard.
+    if args.kind in PUBLISHABLE_KINDS:
+        artifact = Path(args.artifact).expanduser().resolve()
+    else:
+        try:
+            artifact = check_unpublished(args.artifact,
+                                         private_root=args.private_root)
+        except UnsafeLocation as refusal:
+            _note(str(refusal))
+            return 3
     if not artifact.is_file():
         _note(f"no such file: {artifact}")
         return 2

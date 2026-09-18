@@ -38,6 +38,24 @@ KINDS = (
     "methodology",
 )
 
+#: Kinds that are published by design, and are therefore exempt from the
+#: destination guard.
+#:
+#: The guard exists because an edition's queries must not reach a public
+#: repository before that edition ships. That reasoning covers the artifacts
+#: whose value depends on being unseen. It does not cover these two, which
+#: citationrecord.org commits to publishing *before* the results they produce:
+#: a prompt protocol nobody can read is not a published protocol, and a
+#: methodology hash nobody can recompute controls nothing.
+#:
+#: Exempting them by kind rather than by a --force flag keeps the decision in
+#: the code, where it is one line to read, instead of in whoever typed the
+#: command.
+PUBLISHABLE_KINDS = (
+    "prompt-protocol",
+    "methodology",
+)
+
 #: The canonical form used for the controlling hash, named in every record so
 #: a third party can recompute it without reading this source.
 CANONICAL_FORM = "json/utf8/sorted-keys/compact/no-trailing-newline"

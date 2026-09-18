@@ -37,6 +37,36 @@ PREFERRED_REPORTERS = frozenset({
     "S.E.2d", "S.W.2d", "S.W.3d", "So. 2d", "So. 3d",
 })
 
+#: Reporters that publish decisions of single-judge courts, where the question
+#: "who wrote the majority opinion" has no correct answer at all.
+#:
+#: A trial court sits as one judge. There is no panel, so there is no majority,
+#: so there is nothing for the question to name. Recording an author for such a
+#: decision does not answer the question; it answers a different one, and makes
+#: the recorded ground truth wrong in a way that punishes a correct response.
+#:
+#: The 2026.09 pilot drew exactly this item and asked four systems who wrote
+#: the majority opinion in a bankruptcy decision reported at 410 B.R. 170.
+#: Three of the four correctly answered that a single-judge court produces no
+#: majority opinion. Our ground truth recorded an author, so a scorer applying
+#: it would have marked those three wrong and the one that played along right.
+#: The defect is ours and it is recorded here rather than in a note.
+SINGLE_JUDGE_REPORTERS = frozenset({
+    "F. Supp.", "F. Supp. 2d", "F. Supp. 3d",   # US district courts
+    "F.R.D.",                                    # district court procedure
+    "B.R.",                                      # bankruptcy courts
+})
+
+#: Case-name shapes where authorship is not well defined even in a reporter
+#: that usually carries panel decisions. A per curiam opinion is by the court
+#: rather than by a judge, and an order is not an opinion at all.
+UNATTRIBUTED_NAME_PATTERNS = (
+    r"(?i)\bper\s+curiam\b",
+    r"(?i)\bon\s+(?:the\s+)?(?:court'?s?\s+)?own\s+motion\b",
+    r"(?i)^\s*in\s+re\s+(?:the\s+)?(?:matter|estate|marriage|adoption|"
+    r"petition|application|disciplinary|discipline)\b",
+)
+
 #: Obscurity, operationalised. A case cited more than this is not unremarkable,
 #: and the whole point of the preference is to test retrieval over recall.
 MAX_CITATION_COUNT = 2

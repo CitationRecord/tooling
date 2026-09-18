@@ -135,6 +135,62 @@ def test_the_real_forbidden_list_names_the_public_repositories():
 
 
 # --------------------------------------------------------------------------
+# kinds that are published on purpose
+
+
+def test_a_prompt_protocol_registers_inside_the_public_repository(tmp_path,
+                                                                  journal):
+    """The guard protects what must stay unseen. A protocol is not that.
+
+    citationrecord.org commits to publishing the prompt protocol before the
+    results it produces, and it lives in this repository. Refusing it here
+    would refuse the only correct location.
+    """
+    from register.config import REPO_ROOT
+
+    protocol = write_json(REPO_ROOT / "register" / "tests" / "tmp-protocol.json",
+                          {"protocol_version": "vtest"})
+    try:
+        code = main(["add", "--artifact", str(protocol), "--kind",
+                     "prompt-protocol", "--edition", "2026.Q4",
+                     "--journal", str(journal)])
+    finally:
+        protocol.unlink()
+    assert code == 0
+    assert read_records(journal)[0]["kind"] == "prompt-protocol"
+
+
+def test_the_exemption_is_by_kind_and_does_not_cover_a_query_set(tmp_path,
+                                                                 journal):
+    """Same location, different kind: the query set is still refused.
+
+    This is the test that matters. The exemption is a property of what the
+    artifact *is*, not of where somebody put it, so moving a query set next to
+    a protocol does not make it publishable.
+    """
+    from register.config import REPO_ROOT
+
+    leak = write_json(REPO_ROOT / "register" / "tests" / "tmp-queries.json")
+    try:
+        code = main(["add", "--artifact", str(leak), "--kind", "query-set",
+                     "--edition", "2026.Q4", "--journal", str(journal)])
+    finally:
+        leak.unlink()
+    assert code == 3
+    assert not journal.exists()
+
+
+def test_only_two_kinds_are_exempt():
+    """A future edit that widens this list fails here rather than quietly."""
+    from register import KINDS, PUBLISHABLE_KINDS
+
+    assert set(PUBLISHABLE_KINDS) == {"prompt-protocol", "methodology"}
+    assert set(PUBLISHABLE_KINDS) <= set(KINDS)
+    for secret in ("query-set", "ground-truth", "item-set"):
+        assert secret not in PUBLISHABLE_KINDS
+
+
+# --------------------------------------------------------------------------
 # hashing
 
 
