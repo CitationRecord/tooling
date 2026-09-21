@@ -137,6 +137,14 @@ resolved relative to the repository root, overridable with `--out`.
 Snapshot directories are named for the UTC capture instant and are never
 reused. Files are written once and then marked read-only.
 
+**Snapshots and the manifest are gitignored in `claim-archive`, so they stay on
+the machine that captured them.** The durable record a reader can reach is the
+Wayback copy, whose URL and timestamp are in every manifest line; the local
+capture is what detects the page changing under a citation it can no longer be
+quoted against. A claim the page depends on should be cited to the archived
+copy rather than to the live URL, because citing a page that can be edited is
+the thing the capture exists to guard against.
+
 ## Manifest records
 
 One JSON object per line, appended, never rewritten. Paths are relative to the
@@ -221,9 +229,14 @@ identity constraints above.
   testimonials produces a new HTML hash every run. Check `change.text` before
   treating a flag as a claim edit, and pin such claims to a stabler URL if one
   exists.
-- **Wayback is best-effort.** Save Page Now rate-limits and sometimes declines.
-  A failure is recorded and never fails the capture; the local snapshot is the
-  primary record. Some sites are excluded from the Wayback Machine entirely.
+- **Wayback is best-effort, and it is the only copy a reader can reach.** Save
+  Page Now rate-limits and sometimes declines. A failure is recorded and never
+  fails the capture, but because snapshots are gitignored the local copy is
+  evidence only to whoever holds the disk. Where Save Page Now declines and an
+  existing snapshot is reported instead, that snapshot was made by someone
+  else, which is better provenance and not ours to schedule. Some sites are
+  excluded from the Wayback Machine entirely, and a claim resting on one of
+  those has no durable third-party record at all.
 - **PDF claims.** A claim in a linked PDF is not captured by Chromium's
   renderer the way an HTML page is. Track the landing page for now.
 - **Single writer.** Concurrent `capture` runs against one output directory are
