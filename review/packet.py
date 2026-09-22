@@ -132,6 +132,47 @@ def unsourced(question: str, category: str, looked_for: str,
     }
 
 
+#: Why an entry leaves the unsourced list without becoming an item.
+#:
+#: Two outcomes, and they are not the same. "sourced" means the authority was
+#: finally obtained and the question could now be drafted. "retired" means it
+#: was obtained and the question is nonetheless spent, because the answer has
+#: been published somewhere a system under test can read.
+#:
+#: A question published with its answer is burned in exactly the sense a
+#: drawn query is burned by being asked: it can no longer measure retrieval,
+#: only recall of our own writing. Recording the reason keeps a retirement
+#: from reading later as a sourcing success.
+RESOLUTION_KINDS = ("sourced", "retired")
+
+
+def resolved(entry: dict, resolution_kind: str, authority_record: dict,
+             note: str) -> dict:
+    """An unsourced entry that has been settled, with what settled it.
+
+    The original entry is carried whole rather than summarised. It recorded
+    why the question could not be grounded, and that account stays readable
+    beside the thing that finally grounded it -- otherwise the list loses the
+    only evidence of how long the gap was open and what was tried.
+    """
+    if resolution_kind not in RESOLUTION_KINDS:
+        raise ValueError(f"resolution_kind must be one of {RESOLUTION_KINDS}")
+    if not authority_record:
+        raise Unsourced("nothing resolved this: no authority record")
+    for required in ("url", "sha256", "retrieved_at_utc"):
+        if not authority_record.get(required):
+            raise Unsourced(f"the authority record has no {required}")
+    if not (note or "").strip():
+        raise ValueError("a resolution must say what it means for the edition")
+    return {
+        "was_unsourced": dict(entry),
+        "resolution_kind": resolution_kind,
+        "authority": dict(authority_record),
+        "note": note.strip(),
+        "resolved_at_utc": iso_utc(),
+    }
+
+
 def packet(edition: str, drafted_by: str, items: list, exclusions: list,
            unsourced_file: str) -> dict:
     """The artifact. Declines registration in its own first fields."""
@@ -166,7 +207,10 @@ def packet(edition: str, drafted_by: str, items: list, exclusions: list,
     }
 
 
-def unsourced_packet(edition: str, entries: list) -> dict:
+def unsourced_packet(edition: str, entries: list, resolved_entries=None) -> dict:
+    resolved_entries = list(resolved_entries or [])
+    retired = sum(1 for r in resolved_entries
+                  if r.get("resolution_kind") == "retired")
     return {
         "schema": UNSOURCED_SCHEMA,
         "registrable": False,
@@ -178,8 +222,19 @@ def unsourced_packet(edition: str, entries: list) -> dict:
             "be sourced says something about the categories, and a gap that "
             "leaves no trace gets filled with a guess next time."
         ),
-        "counts": {"unsourced": len(entries)},
+        "resolved_note": (
+            "Entries that have since been settled, kept here rather than "
+            "deleted. A list that dropped them would lose the evidence of how "
+            "long each gap was open and what finally closed it. A resolution "
+            "marked `retired` did not become usable: the authority was "
+            "obtained and the question is spent anyway, because its answer has "
+            "been published where a system under test can read it."
+        ),
+        "counts": {"unsourced": len(entries),
+                   "resolved": len(resolved_entries),
+                   "retired": retired},
         "entries": entries,
+        "resolved": resolved_entries,
         "created_at_utc": iso_utc(),
         "provenance": provenance(),
     }

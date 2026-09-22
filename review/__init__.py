@@ -36,7 +36,7 @@ reviews, and the component records both.
 __version__ = "0.1.0"
 
 SCHEMA = "citationrecord.review.v1"
-UNSOURCED_SCHEMA = "citationrecord.review.unsourced.v1"
+UNSOURCED_SCHEMA = "citationrecord.review.unsourced.v2"
 
 #: How much work the answer represents, which tells a reviewer where to spend
 #: their attention. Transcription is a document quoted; reading is a holding

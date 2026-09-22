@@ -211,3 +211,80 @@ def test_a_packet_may_not_be_written_into_a_repository(tmp_path):
     doc = packet("2026.Q4", "JB Wagoner", [an_item()], [], "unsourced.json")
     with pytest.raises(UnsafeLocation):
         write(doc, repo / "packet.json")
+
+
+# --------------------------------------------------------------------------
+# resolving an unsourced entry, and the difference between sourced and retired
+
+
+def _entry():
+    from review.packet import unsourced
+
+    return unsourced(
+        question="When is an opposition due in N.D. Cal.?",
+        category="local-rules",
+        looked_for="Civil Local Rule 7-3",
+        why_not="Two retrievals returned two different rules.",
+        reason_kind="authority ambiguous")
+
+
+AUTH = {"name": "N.D. Cal. Civil L.R. 7-3(a)",
+        "url": "https://cand.uscourts.gov/x.pdf",
+        "sha256": "a" * 64,
+        "retrieved_at_utc": "2026-09-21"}
+
+
+def test_a_resolution_carries_the_original_account_whole():
+    """The list must still show how long the gap was open and what was tried."""
+    from review.packet import resolved
+
+    r = resolved(_entry(), "retired", AUTH, "burned by publication")
+    assert r["was_unsourced"]["why_not"].startswith("Two retrievals")
+    assert r["was_unsourced"]["reason_kind"] == "authority ambiguous"
+    assert r["authority"]["sha256"] == "a" * 64
+
+
+def test_retired_is_not_the_same_as_sourced():
+    from review.packet import RESOLUTION_KINDS, resolved
+
+    assert set(RESOLUTION_KINDS) == {"sourced", "retired"}
+    assert resolved(_entry(), "retired", AUTH, "n")["resolution_kind"] == "retired"
+    with pytest.raises(ValueError, match="resolution_kind"):
+        resolved(_entry(), "found", AUTH, "n")
+
+
+def test_a_resolution_without_a_pinned_authority_is_refused():
+    """The same rule the packet applies to items: no authority, not an item."""
+    from review.packet import Unsourced, resolved
+
+    with pytest.raises(Unsourced):
+        resolved(_entry(), "sourced", {}, "n")
+    for missing in ("url", "sha256", "retrieved_at_utc"):
+        partial = {k: v for k, v in AUTH.items() if k != missing}
+        with pytest.raises(Unsourced, match=missing):
+            resolved(_entry(), "sourced", partial, "n")
+
+
+def test_a_resolution_must_say_what_it_means_for_the_edition():
+    from review.packet import resolved
+
+    with pytest.raises(ValueError, match="what it means"):
+        resolved(_entry(), "retired", AUTH, "   ")
+
+
+def test_the_packet_counts_retirements_separately():
+    from review.packet import resolved, unsourced_packet
+
+    r = resolved(_entry(), "retired", AUTH, "burned")
+    doc = unsourced_packet("2026.Q4", [], [r])
+    assert doc["counts"] == {"unsourced": 0, "resolved": 1, "retired": 1}
+    assert doc["registrable"] is False
+    assert "retired" in doc["resolved_note"]
+
+
+def test_an_empty_resolved_list_is_the_old_shape_plus_zeroes():
+    from review.packet import unsourced_packet
+
+    doc = unsourced_packet("2026.Q4", [_entry()])
+    assert doc["counts"] == {"unsourced": 1, "resolved": 0, "retired": 0}
+    assert doc["resolved"] == []

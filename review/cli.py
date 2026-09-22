@@ -14,7 +14,7 @@ import sys
 import textwrap
 
 from . import TIERS, __version__
-from .packet import read
+from .packet import RESOLUTION_KINDS, read, resolved, unsourced_packet, write
 
 
 def _utf8(stream):
@@ -98,6 +98,52 @@ def cmd_show(args) -> int:
     return 0
 
 
+def cmd_resolve(args) -> int:
+    """Move one entry off the unsourced list, recording what settled it.
+
+    The entry is not deleted. It moves to `resolved` carrying its own original
+    account of why it could not be grounded, so the record still shows how
+    long the gap was open and what was tried.
+    """
+    document = read(args.list)
+    matches = [e for e in document.get("entries", [])
+               if args.match.lower() in (e.get("looked_for", "")
+                                         + " " + e.get("question", "")).lower()]
+    if len(matches) != 1:
+        _out(f"--match selected {len(matches)} entries; it must select exactly one.")
+        for e in document.get("entries", []):
+            _out(f"  {e.get('looked_for')}")
+        return 1
+
+    entry = matches[0]
+    authority = {"url": args.url, "sha256": args.sha256,
+                 "retrieved_at_utc": args.retrieved,
+                 "effective": args.effective, "name": args.name}
+    try:
+        record = resolved(entry, args.kind, authority, args.note)
+    except ValueError as refusal:
+        _out(str(refusal))
+        return 1
+
+    remaining = [e for e in document["entries"] if e is not entry]
+    rebuilt = unsourced_packet(document["edition"], remaining,
+                               list(document.get("resolved", [])) + [record])
+    write(rebuilt, args.list)
+
+    _out(f"resolved  {entry.get('looked_for')}")
+    _out(f"  kind      {record['resolution_kind']}")
+    _out(f"  authority {authority['url']}")
+    _out(f"  sha256    {authority['sha256']}")
+    _out(f"  retrieved {authority['retrieved_at_utc']}")
+    _out(f"  note      {record['note']}")
+    _out("")
+    _out(f"  unsourced {rebuilt['counts']['unsourced']}  "
+         f"resolved {rebuilt['counts']['resolved']}  "
+         f"retired {rebuilt['counts']['retired']}")
+    _out(f"  written   {args.list}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="review",
@@ -111,6 +157,24 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--tier", choices=TIERS,
                       help="show only one tier")
     show.set_defaults(func=cmd_show)
+
+    res = subparsers.add_parser(
+        "resolve", help="move an entry off the unsourced list")
+    res.add_argument("--list", required=True, metavar="FILE",
+                     help="the unsourced list to amend")
+    res.add_argument("--match", required=True, metavar="TEXT",
+                     help="substring selecting exactly one entry")
+    res.add_argument("--kind", required=True, choices=RESOLUTION_KINDS)
+    res.add_argument("--name", required=True, metavar="TEXT",
+                     help="the authority that settled it")
+    res.add_argument("--url", required=True, metavar="URL")
+    res.add_argument("--sha256", required=True, metavar="HEX")
+    res.add_argument("--retrieved", required=True, metavar="YYYY-MM-DD")
+    res.add_argument("--effective", metavar="TEXT",
+                     help="the date the authority states for itself")
+    res.add_argument("--note", required=True, metavar="TEXT",
+                     help="what this means for the edition")
+    res.set_defaults(func=cmd_resolve)
     return parser
 
 
